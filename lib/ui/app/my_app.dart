@@ -6,6 +6,8 @@ import 'app_router.dart';
 
 /// Root de la aplicación.
 /// MaterialApp.router + Riverpod + ThemeData oscuro + localizations.
+// TODO: AppLocalizations — strings hardcoded in ES for MVP
+// Full i18n implementation deferred (technical debt)
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 

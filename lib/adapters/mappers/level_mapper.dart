@@ -23,6 +23,8 @@ class LevelMapper {
     );
   }
 
+  // Unused: arrows are generated client-side by LevelGenerator,
+  // not received from backend. Kept for potential future use.
   Arrow arrowFromJson(Map<String, dynamic> json) {
     final segmentsJson = json['segments'] as List<dynamic>;
     final segments = segmentsJson.map((segmentJson) {
