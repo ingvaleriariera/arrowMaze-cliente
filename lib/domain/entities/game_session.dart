@@ -34,6 +34,13 @@ class GameSession {
       } else if (moves >= maxMoves) {
         state = DefeatState();
       }
+    } else {
+      // Flecha bloqueada: gastar movimiento y descontar 5 puntos
+      moves++;
+      score = (score - 5).clamp(0, 999999); // No permitir score negativo
+      if (moves >= maxMoves) {
+        state = DefeatState();
+      }
     }
     return result;
   }
