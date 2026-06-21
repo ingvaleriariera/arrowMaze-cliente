@@ -175,28 +175,27 @@ class LevelGenerator {
   }
 
   /// Detecta si hay una flecha frente a esta (face-to-face) que causaría deadlock.
-  /// Escanea en dirección opuesta desde [head]. Si se encuentra una flecha cuya
-  /// cabeza está exactamente en esa celda Y apunta hacia [head], hay face-to-face.
+  /// Escanea en la dirección de salida desde [head]. Si se encuentra una flecha
+  /// que apunta hacia nosotros (dirección opuesta), hay face-to-face.
   bool _isFaceToFace(
     Position head,
     Direction direction,
     Map<String, Direction> headPositions,
   ) {
     final opposite = _oppositeDirection(direction);
-    var current = head.translate(opposite);
+    var current = head.translate(direction);
     while (true) {
       final key = current.toKey();
-      // Si hay una flecha con cabeza exactamente aquí
+      // Si hay una flecha con cabeza en nuestro camino de salida
       if (headPositions.containsKey(key)) {
         final headDir = headPositions[key]!;
-        // Si apunta hacia nuestra cabeza (en dirección opuesta a la nuestra)
+        // Si apunta hacia nosotros (dirección opuesta): face-to-face
         if (_directionsEqual(headDir, opposite)) {
           return true; // Face-to-face detectado
         }
       }
-      // Continuar escaneando si la celda está vacía
-      // (no necesitamos chequear occupied aquí porque headPositions solo tiene cabezas)
-      current = current.translate(opposite);
+      // Continuar escaneando en nuestro camino de salida
+      current = current.translate(direction);
       // Limitar la búsqueda para evitar loops infinitos: máximo 20 celdas
       if (current.x < -20 || current.x > 20 || current.y < -20 || current.y > 20) {
         break;
