@@ -277,8 +277,14 @@ class BoardPainter extends CustomPainter {
         arrowColor = Color.lerp(arrowColor, const Color(0xFFFF3366), t)!;
       }
 
-      final offsets =
-          arrow.getSegments().map((s) => _centerP(s.getPosition())).toList();
+      // getSegments() está cabeza→cola (segments.first == head); _drawArrow
+      // espera cola→cabeza (offsets.last == head) para dibujar la punta
+      // en el extremo correcto, igual que cells en el HTML.
+      final offsets = arrow
+          .getSegments()
+          .reversed
+          .map((s) => _centerP(s.getPosition()))
+          .toList();
       _drawArrow(canvas, offsets, arrow.getDirection(), arrowColor, alpha);
     }
 

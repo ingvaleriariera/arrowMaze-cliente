@@ -25,6 +25,7 @@ import '../../application/ports/i_leaderboard_repository.dart';
 import '../../application/use_cases/auth/login_use_case.dart';
 import '../../application/use_cases/auth/logout_use_case.dart';
 import '../../application/use_cases/auth/register_use_case.dart';
+import '../../application/use_cases/auth/restore_session_use_case.dart';
 import '../../application/use_cases/game/activate_arrow_use_case.dart';
 import '../../application/use_cases/game/get_level_summaries_use_case.dart';
 import '../../application/use_cases/game/load_level_use_case.dart';
@@ -116,6 +117,10 @@ final logoutUseCaseProvider = Provider<LogoutUseCase>((ref) {
   return LogoutUseCase(ref.read(authRepositoryProvider));
 });
 
+final restoreSessionUseCaseProvider = Provider<RestoreSessionUseCase>((ref) {
+  return RestoreSessionUseCase(ref.read(authRepositoryProvider));
+});
+
 final loadLevelUseCaseProvider = Provider<LoadLevelUseCase>((ref) {
   return LoadLevelUseCase(ref.read(levelRepositoryProvider));
 });
@@ -175,6 +180,7 @@ final authNotifierProvider =
     ref.read(registerUseCaseProvider),
     ref.read(logoutUseCaseProvider),
     ref.read(syncProgressUseCaseProvider),
+    ref.read(restoreSessionUseCaseProvider),
   );
 });
 

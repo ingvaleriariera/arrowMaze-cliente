@@ -34,8 +34,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   Future<void> _navigate() async {
     if (!mounted) return;
-    final authRepo = ref.read(authRepositoryProvider);
-    final isAuth = await authRepo.isAuthenticated();
+    final isAuth = await ref.read(authNotifierProvider.notifier).restoreSession();
     if (!mounted) return;
     if (isAuth) {
       context.go('/levels');

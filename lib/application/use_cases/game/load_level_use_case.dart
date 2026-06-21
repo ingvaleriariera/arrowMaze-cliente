@@ -13,7 +13,7 @@ class LoadLevelUseCase {
     final level = levels.firstWhere((l) => l.getId() == levelId);
 
     final shape = level.getBoardShape();
-    final arrows = LevelGenerator().generate(shape);
+    final arrows = LevelGenerator().generate(shape, difficulty: level.getDifficulty());
 
     final builder = BoardBuilder.create().setShape(shape);
     for (final arrow in arrows) {

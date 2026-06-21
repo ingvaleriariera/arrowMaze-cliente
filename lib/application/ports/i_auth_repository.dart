@@ -5,5 +5,6 @@ abstract class IAuthRepository {
   Future<AuthResultDTO> register(String email, String username, String password);
   Future<void> logout();
   Future<String?> getToken();
+  Future<String?> getUserId();
   Future<bool> isAuthenticated();
 }

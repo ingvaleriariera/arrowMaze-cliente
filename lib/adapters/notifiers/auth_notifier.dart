@@ -5,6 +5,7 @@ import '../../application/dtos/register_input_dto.dart';
 import '../../application/use_cases/auth/login_use_case.dart';
 import '../../application/use_cases/auth/logout_use_case.dart';
 import '../../application/use_cases/auth/register_use_case.dart';
+import '../../application/use_cases/auth/restore_session_use_case.dart';
 import '../../application/use_cases/progress/sync_progress_use_case.dart';
 
 class AuthState {
@@ -19,12 +20,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final RegisterUseCase registerUseCase;
   final LogoutUseCase logoutUseCase;
   final SyncProgressUseCase syncProgressUseCase;
+  final RestoreSessionUseCase restoreSessionUseCase;
 
   AuthNotifier(
     this.loginUseCase,
     this.registerUseCase,
     this.logoutUseCase,
     this.syncProgressUseCase,
+    this.restoreSessionUseCase,
   ) : super(const AuthState());
 
   Future<void> login(String email, String password) async {
@@ -42,6 +45,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await logoutUseCase.execute();
     state = const AuthState();
+  }
+
+  /// Restaura la sesión local (token + userId) al abrir/recargar la app.
+  /// Devuelve true si había una sesión válida.
+  Future<bool> restoreSession() async {
+    final result = await restoreSessionUseCase.execute();
+    if (result == null) return false;
+    state = AuthState(isAuthenticated: true, userId: result.userId);
+    return true;
   }
 
   bool getIsAuthenticated() => state.isAuthenticated;

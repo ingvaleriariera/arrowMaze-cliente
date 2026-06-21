@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 
 class AuthRepositoryImpl implements IAuthRepository {
   static const String _tokenKey = 'auth_token';
+  static const String _userIdKey = 'auth_user_id';
 
   final ApiClient apiClient;
   final FlutterSecureStorage secureStorage;
@@ -19,7 +20,7 @@ class AuthRepositoryImpl implements IAuthRepository {
       'password': password,
     });
     final result = AuthResultDTO(response['token'] as String, response['userId'] as String);
-    await _persistToken(result.token);
+    await _persistSession(result);
     return result;
   }
 
@@ -31,13 +32,14 @@ class AuthRepositoryImpl implements IAuthRepository {
       'password': password,
     });
     final result = AuthResultDTO(response['token'] as String, response['userId'] as String);
-    await _persistToken(result.token);
+    await _persistSession(result);
     return result;
   }
 
   @override
   Future<void> logout() async {
     await secureStorage.delete(key: _tokenKey);
+    await secureStorage.delete(key: _userIdKey);
     apiClient.clearToken();
   }
 
@@ -45,13 +47,17 @@ class AuthRepositoryImpl implements IAuthRepository {
   Future<String?> getToken() => secureStorage.read(key: _tokenKey);
 
   @override
+  Future<String?> getUserId() => secureStorage.read(key: _userIdKey);
+
+  @override
   Future<bool> isAuthenticated() async {
     final token = await getToken();
     return token != null;
   }
 
-  Future<void> _persistToken(String token) async {
-    await secureStorage.write(key: _tokenKey, value: token);
-    apiClient.setToken(token);
+  Future<void> _persistSession(AuthResultDTO result) async {
+    await secureStorage.write(key: _tokenKey, value: result.token);
+    await secureStorage.write(key: _userIdKey, value: result.userId);
+    apiClient.setToken(result.token);
   }
 }

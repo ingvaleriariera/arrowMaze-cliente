@@ -54,8 +54,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // Disparar animación correspondiente
     if (wasActivatable && arrow != null) {
       final segments = arrow.getSegments();
-      // cells = de cola a cabeza (el painter las espera en ese orden)
-      final cells = segments.map((s) => s.getPosition()).toList();
+      // segments está cabeza→cola; cells = de cola a cabeza
+      // (el painter las espera en ese orden, igual que cells en el HTML).
+      final cells = segments.reversed.map((s) => s.getPosition()).toList();
       final anim = ExitAnimation(
         cells: cells,
         direction: arrow.getDirection(),

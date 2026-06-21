@@ -48,6 +48,10 @@ class GameNotifier extends StateNotifier<GameState> {
   String? _levelId;
   Timer? _timer;
 
+  // Evita que una carga de nivel obsoleta (resuelta fuera de orden si el
+  // usuario navega entre niveles rápido) sobrescriba la sesión actual.
+  int _loadRequestId = 0;
+
   GameNotifier(
     this.loadLevelUseCase,
     this.activateArrowUseCase,
@@ -61,10 +65,14 @@ class GameNotifier extends StateNotifier<GameState> {
   ) : super(const GameState());
 
   Future<void> loadLevel(String levelId, {String? userId}) async {
-    _levelId = levelId;
-    _userId = userId;
+    final requestId = ++_loadRequestId;
     final session = await loadLevelUseCase.execute(levelId);
     final progress = userId != null ? await getProgressUseCase.execute(userId) : null;
+    // Si se pidió otra carga mientras esta estaba en vuelo, se descarta:
+    // ya no representa el nivel que el usuario está viendo.
+    if (requestId != _loadRequestId) return;
+    _levelId = levelId;
+    _userId = userId;
     state = GameState(session: session, progress: progress);
     if (session.isTimedLevel()) {
       _startTimer();
