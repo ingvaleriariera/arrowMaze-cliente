@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../entities/arrow.dart';
 import '../entities/arrow_segment.dart';
+import '../entities/board.dart';
 import '../value_objects/arrow_color.dart';
 import '../value_objects/board_shape.dart';
 import '../value_objects/direction.dart';
@@ -92,6 +93,9 @@ class LevelGenerator {
         occupied[key] = arrowId;
       }
     }
+
+    // Validación post-generación: simular greedy resolver
+    if (!_isCompletelySolvable(arrows, shape)) return null;
     return arrows;
   }
 
@@ -173,5 +177,62 @@ class LevelGenerator {
   Position _parseKey(String key) {
     final parts = key.split(',');
     return Position(int.parse(parts[0]), int.parse(parts[1]));
+  }
+
+  /// Verifica que el nivel es completamente resoluble con estrategia greedy.
+  /// Simula el juego activando siempre la primera flecha activable encontrada.
+  /// Si en algún punto no hay flechas activables pero quedan flechas, es deadlock.
+  bool _isCompletelySolvable(List<Arrow> arrows, BoardShape shape) {
+    if (arrows.isEmpty) return true;
+
+    // Construir tablero temporal
+    final arrowMap = <String, Arrow>{};
+    final grid = <String, String>{};
+    for (final arrow in arrows) {
+      arrowMap[arrow.getId()] = arrow;
+      for (final segment in arrow.getSegments()) {
+        grid[segment.getPosition().toKey()] = arrow.getId();
+      }
+    }
+
+    // Simular: mientras haya flechas, activar la primera activable
+    var iterations = 0;
+    final maxIterations = arrows.length * 10; // Prevenir loops infinitos
+
+    while (arrowMap.isNotEmpty && iterations < maxIterations) {
+      iterations++;
+
+      // Reconstruir el grafo de dependencias para la situación actual
+      final currentBoard = _buildBoardForSolver(arrowMap, grid, shape);
+      final activatable = currentBoard.getActivatableArrows();
+
+      if (activatable.isEmpty) {
+        // Deadlock: no hay flechas activables pero quedan flechas
+        return false;
+      }
+
+      // Activar la primera flecha activable (greedy)
+      final nextArrowId = activatable.first;
+      _removeArrowForSolver(nextArrowId, arrowMap, grid);
+    }
+
+    // Si llegamos aquí, todas las flechas fueron removidas: solvable
+    return arrowMap.isEmpty;
+  }
+
+  /// Construye un tablero temporal a partir de arrowMap y grid para verificación.
+  Board _buildBoardForSolver(Map<String, Arrow> arrowMap, Map<String, String> gridMap, BoardShape shape) {
+    final board = Board(shape, arrowMap);
+    return board;
+  }
+
+  /// Remueve una flecha del mapa y grid.
+  void _removeArrowForSolver(String arrowId, Map<String, Arrow> arrowMap, Map<String, String> gridMap) {
+    final arrow = arrowMap.remove(arrowId);
+    if (arrow != null) {
+      for (final segment in arrow.getSegments()) {
+        gridMap.remove(segment.getPosition().toKey());
+      }
+    }
   }
 }

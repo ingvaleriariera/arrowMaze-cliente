@@ -70,8 +70,11 @@ class BoardPainter extends CustomPainter {
   // ── Utilidades de coordenadas ──────────────────────────────
 
   /// Centro en píxeles de una celda lógica (x, y).
+  /// Redondea al píxel más cercano para evitar blurring causado por decimales.
   Offset _center(double gx, double gy) {
-    return Offset(gx * cellSize + cellSize / 2, gy * cellSize + cellSize / 2);
+    final x = (gx * cellSize + cellSize / 2).roundToDouble();
+    final y = (gy * cellSize + cellSize / 2).roundToDouble();
+    return Offset(x, y);
   }
 
   Offset _centerP(Position p) => _center(p.x.toDouble(), p.y.toDouble());
@@ -146,15 +149,15 @@ class BoardPainter extends CustomPainter {
     final hw = cellSize * 0.48;
     final hl = cellSize * 0.38;
 
-    // Tip del triángulo
+    // Tip del triángulo (redondeado a píxeles)
     final tip = Offset(
-      headPos.dx + vec.dx * hl * 0.65,
-      headPos.dy + vec.dy * hl * 0.65,
+      (headPos.dx + vec.dx * hl * 0.65).roundToDouble(),
+      (headPos.dy + vec.dy * hl * 0.65).roundToDouble(),
     );
-    // Base del triángulo
+    // Base del triángulo (redondeado a píxeles)
     final base = Offset(
-      headPos.dx - vec.dx * hl * 0.40,
-      headPos.dy - vec.dy * hl * 0.40,
+      (headPos.dx - vec.dx * hl * 0.40).roundToDouble(),
+      (headPos.dy - vec.dy * hl * 0.40).roundToDouble(),
     );
     // Perpendicular al vector
     final px = -vec.dy.toDouble();
@@ -171,7 +174,7 @@ class BoardPainter extends CustomPainter {
       Paint()
         ..color = color
         ..style = PaintingStyle.fill
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 7),
+        ..isAntiAlias = true,
     );
   }
 
@@ -187,22 +190,35 @@ class BoardPainter extends CustomPainter {
   ) {
     if (offsets.isEmpty) return;
 
-    final paint = Paint()
-      ..color = color.withValues(alpha: alpha)
-      ..strokeWidth = cellSize * 0.17
+    final strokeWidth = cellSize * 0.17;
+
+    // Glow layer (bajo alpha, más ancho)
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: alpha * 0.3)
+      ..strokeWidth = strokeWidth * 1.8
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, alpha == 1.0 ? 6 : 4);
+      ..isAntiAlias = true;
+
+    // Main line (nítida, sin blur)
+    final mainPaint = Paint()
+      ..color = color.withValues(alpha: alpha)
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
 
     if (offsets.length == 1) {
       // Flecha de un solo segmento: línea corta + cabeza
       final c = offsets.first;
       final tail = Offset(
-        c.dx - direction.dx * cellSize * 0.28,
-        c.dy - direction.dy * cellSize * 0.28,
+        (c.dx - direction.dx * cellSize * 0.28).roundToDouble(),
+        (c.dy - direction.dy * cellSize * 0.28).roundToDouble(),
       );
-      canvas.drawLine(tail, c, paint);
+      canvas.drawLine(tail, c, glowPaint);
+      canvas.drawLine(tail, c, mainPaint);
       _drawArrowHead(canvas, c, direction, color.withValues(alpha: alpha));
       return;
     }
@@ -236,7 +252,9 @@ class BoardPainter extends CustomPainter {
     }
     path.lineTo(offsets.last.dx, offsets.last.dy);
 
-    canvas.drawPath(path, paint);
+    // Dibujar glow primero, luego línea principal nítida
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, mainPaint);
     _drawArrowHead(canvas, offsets.last, direction, color.withValues(alpha: alpha));
   }
 
@@ -245,8 +263,7 @@ class BoardPainter extends CustomPainter {
   // ─────────────────────────────────────────────────────────
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Fondo (opcional — el Scaffold ya pinta #0d0d18)
-    // No lo dibujamos aquí para respetar el widget padre.
+    canvas.save();
 
     // 2. Puntos en celdas válidas vacías (#252535, radio = cellSize × 0.07)
     final dotPaint = Paint()
@@ -297,6 +314,8 @@ class BoardPainter extends CustomPainter {
           : 1.0;
       _drawArrow(canvas, animOffsets, anim.direction, anim.color, alpha);
     }
+
+    canvas.restore();
   }
 
   @override
@@ -430,10 +449,12 @@ class BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin 
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cellSize = math.min(
+        // Calcular cellSize y redondear a píxeles enteros para evitar anti-aliasing/blur
+        final rawCellSize = math.min(
           constraints.maxWidth / logicalCols,
           constraints.maxHeight / logicalRows,
         );
+        final cellSize = rawCellSize.floor().toDouble();
         final boardW = cellSize * logicalCols;
         final boardH = cellSize * logicalRows;
 
