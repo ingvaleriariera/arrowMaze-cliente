@@ -189,8 +189,8 @@ class LevelGenerator {
       // Si hay una flecha con cabeza exactamente aquí
       if (headPositions.containsKey(key)) {
         final headDir = headPositions[key]!;
-        // Si apunta hacia nuestra cabeza (es decir, en la misma dirección que la nuestra)
-        if (_directionsEqual(headDir, direction)) {
+        // Si apunta hacia nuestra cabeza (en dirección opuesta a la nuestra)
+        if (_directionsEqual(headDir, opposite)) {
           return true; // Face-to-face detectado
         }
       }
