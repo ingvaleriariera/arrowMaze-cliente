@@ -16,12 +16,19 @@ import '../screens/victory_screen.dart';
 /// Provider del router go_router con guard de auth.
 /// Declarado aquí y consumido en MyApp.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
-
+  // OJO: NO usar ref.watch aquí. GoRouter debe ser una instancia única
+  // para toda la vida de la app — si este Provider se recalcula (porque
+  // observa authNotifierProvider reactivamente), se crea un GoRouter
+  // nuevo en cada cambio de auth, lo que resetea la navegación a
+  // initialLocation y puede producir un loop infinito (p. ej.
+  // restoreSession() cambia el auth state → se recrea el router → vuelve
+  // a '/' → splash vuelve a llamar restoreSession() → ...).
+  // redirect() ya se reevalúa en cada navegación, así que basta con
+  // leer el estado actual con ref.read en ese momento.
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
-      final isAuth = authState.isAuthenticated;
+      final isAuth = ref.read(authNotifierProvider).isAuthenticated;
       final loc = state.matchedLocation;
       final isPublic = loc == '/' || loc == '/login' || loc == '/register';
       if (!isAuth && !isPublic) return '/login';
