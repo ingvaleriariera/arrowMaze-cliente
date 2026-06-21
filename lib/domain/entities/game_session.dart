@@ -25,23 +25,27 @@ class GameSession {
   }
 
   MoveResult executeMove(String arrowId) {
+    // SIEMPRE incrementar movimientos (exitoso o no)
+    moves++;
+
     final result = state.handle(arrowId, board);
+
     if (result.isSuccess()) {
-      moves++;
-      score += result.getExitedSegments().length;
+      // Flecha activable: sumar puntos por segmentos
+      score += result.getExitedSegments().length * 10;
       if (board.isEmpty()) {
         state = VictoryState();
-      } else if (moves >= maxMoves) {
-        state = DefeatState();
       }
     } else {
-      // Flecha bloqueada: gastar movimiento y descontar 5 puntos
-      moves++;
-      score = (score - 5).clamp(0, 999999); // No permitir score negativo
-      if (moves >= maxMoves) {
-        state = DefeatState();
-      }
+      // Flecha bloqueada: restar 5 puntos
+      score = (score - 5).clamp(0, 999999);
     }
+
+    // Verificar derrota por movimientos
+    if (moves >= maxMoves && state.getLabel() == 'playing') {
+      state = DefeatState();
+    }
+
     return result;
   }
 

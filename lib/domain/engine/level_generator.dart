@@ -63,13 +63,12 @@ class LevelGenerator {
     final occupied = <String, String>{};
     final arrows = <Arrow>[];
     final maxLen = _maxSegmentLength(difficulty);
-    final headPositions = <String, Direction>{}; // Mapa de cabezas para detectar face-to-face
     var failStreak = 0;
     var colorIdx = 0;
 
     while (remaining.isNotEmpty) {
       if (failStreak > 100) return null;
-      final placement = _findActivatableArrow(remaining, occupied, shape, maxLen, headPositions);
+      final placement = _findActivatableArrow(remaining, occupied, shape, maxLen);
       if (placement == null) {
         failStreak++;
         continue;
@@ -93,10 +92,6 @@ class LevelGenerator {
         remaining.remove(key);
         occupied[key] = arrowId;
       }
-
-      // Registrar la cabeza de esta flecha para detectar face-to-face futuro
-      final head = placement.cells.last;
-      headPositions[head.toKey()] = placement.direction;
     }
 
     // Validación post-generación: simular greedy resolver
@@ -109,7 +104,6 @@ class LevelGenerator {
     Map<String, String> occupied,
     BoardShape shape,
     int maxLen,
-    Map<String, Direction> headPositions,
   ) {
     final cellList = remaining.map(_parseKey).toList();
     for (var attempt = 0; attempt < 300; attempt++) {
@@ -125,10 +119,7 @@ class LevelGenerator {
 
       for (final direction in candidateDirections) {
         if (_isExitPathClear(head, direction, shape, occupied)) {
-          // Verificar face-to-face: escanear en dirección opuesta desde la cabeza
-          if (!_isFaceToFace(head, direction, headPositions)) {
-            return _ArrowPlacement(cells, direction);
-          }
+          return _ArrowPlacement(cells, direction);
         }
       }
     }
@@ -173,46 +164,6 @@ class LevelGenerator {
     }
     return true;
   }
-
-  /// Detecta si hay una flecha frente a esta (face-to-face) que causaría deadlock.
-  /// Escanea en la dirección de salida desde [head]. Si se encuentra una flecha
-  /// que apunta hacia nosotros (dirección opuesta), hay face-to-face.
-  bool _isFaceToFace(
-    Position head,
-    Direction direction,
-    Map<String, Direction> headPositions,
-  ) {
-    final opposite = _oppositeDirection(direction);
-    var current = head.translate(direction);
-    while (true) {
-      final key = current.toKey();
-      // Si hay una flecha con cabeza en nuestro camino de salida
-      if (headPositions.containsKey(key)) {
-        final headDir = headPositions[key]!;
-        // Si apunta hacia nosotros (dirección opuesta): face-to-face
-        if (_directionsEqual(headDir, opposite)) {
-          return true; // Face-to-face detectado
-        }
-      }
-      // Continuar escaneando en nuestro camino de salida
-      current = current.translate(direction);
-      // Limitar la búsqueda para evitar loops infinitos: máximo 20 celdas
-      if (current.x < -20 || current.x > 20 || current.y < -20 || current.y > 20) {
-        break;
-      }
-    }
-    return false;
-  }
-
-  Direction _oppositeDirection(Direction dir) {
-    if (dir.dx == 1) return Direction.left();
-    if (dir.dx == -1) return Direction.right();
-    if (dir.dy == 1) return Direction.up();
-    return Direction.down();
-  }
-
-  bool _directionsEqual(Direction a, Direction b) =>
-      a.dx == b.dx && a.dy == b.dy;
 
   Direction _directionBetween(Position from, Position to) {
     final dx = to.x - from.x;
