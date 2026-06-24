@@ -167,8 +167,7 @@ class BoardPainter extends CustomPainter {
 
     final paint = Paint()
       ..color = col.withAlpha((alpha * 255).toInt())
-      ..style = PaintingStyle.fill
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+      ..style = PaintingStyle.fill;
 
     canvas.drawPath(path, paint);
   }

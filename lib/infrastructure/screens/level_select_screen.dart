@@ -92,6 +92,13 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
     }
 
     debugPrint('   → Showing ${state.levels.length} levels in grid');
+
+    // DEBUG: Print the full list of levels as displayed
+    debugPrint('📋 LEVEL LIST (UI order):');
+    state.levels.asMap().forEach((index, summary) {
+      debugPrint('   UI position $index → levelId=${summary.levelId} difficulty=${summary.difficulty}');
+    });
+
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -104,12 +111,12 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
         final level = state.levels[index];
         return GestureDetector(
           onTap: () {
-            debugPrint('👆 LevelSelectScreen: Level tapped - ${level.levelId}');
-            
+            debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
+
             // Call loadLevel BEFORE navigating
             debugPrint('   → Calling gameNotifier.loadLevel(${level.levelId})');
             ref.read(gameNotifierProvider.notifier).loadLevel(level.levelId, 'user_123');
-            
+
             // Now navigate to game screen
             debugPrint('   → Navigating to /game/${level.levelId}');
             context.go('/game/${level.levelId}');

@@ -16,15 +16,25 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
     try {
       debugPrint('📞 LevelSelectNotifier: Calling getLevelSummariesUseCase.execute()');
       final summaries = await getLevelSummariesUseCase.execute(userId);
-      
-      debugPrint('✅ LevelSelectNotifier: Received ${summaries.length} summaries');
-      for (var i = 0; i < summaries.length; i++) {
-        debugPrint('   Level $i: id=${summaries[i].levelId}, difficulty=${summaries[i].difficulty}, completed=${summaries[i].completed}');
+
+      debugPrint('✅ LevelSelectNotifier: Received ${summaries.length} summaries (before sorting)');
+
+      // Sort levels by numeric ID
+      final sortedSummaries = List.of(summaries);
+      sortedSummaries.sort((a, b) {
+        final numA = int.tryParse(a.levelId.replaceAll('level-', '')) ?? 0;
+        final numB = int.tryParse(b.levelId.replaceAll('level-', '')) ?? 0;
+        return numA.compareTo(numB);
+      });
+
+      debugPrint('✅ LevelSelectNotifier: After sorting:');
+      for (var i = 0; i < sortedSummaries.length; i++) {
+        debugPrint('   Position $i: id=${sortedSummaries[i].levelId}, difficulty=${sortedSummaries[i].difficulty}');
       }
 
       debugPrint('🔄 LevelSelectNotifier: Updating state with isLoading=false');
       state = state.copyWith(
-        levels: summaries,
+        levels: sortedSummaries,
         isLoading: false,
       );
       debugPrint('✅ LevelSelectNotifier: State updated successfully');

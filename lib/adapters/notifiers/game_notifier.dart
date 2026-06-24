@@ -35,7 +35,7 @@ class GameNotifier extends StateNotifier<GameState> {
   }) : super(const GameState());
 
   Future<void> loadLevel(String levelId, String userId) async {
-    debugPrint('🎮 GameNotifier.loadLevel: Called with levelId=$levelId, userId=$userId');
+    debugPrint('🎮 GameNotifier.loadLevel called with: $levelId');
     
     state = state.copyWith(isLoading: true, error: null);
     debugPrint('   State set to isLoading=true');

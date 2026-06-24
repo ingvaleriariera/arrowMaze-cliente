@@ -24,8 +24,8 @@ class ApiClient {
     _dio.interceptors.add(interceptor);
   }
 
-  Future<Map<String, dynamic>> get(String path) async {
-    final response = await _dio.get(path);
+  Future<Map<String, dynamic>> get(String path, {Options? options}) async {
+    final response = await _dio.get(path, options: options);
     return response.data as Map<String, dynamic>;
   }
 

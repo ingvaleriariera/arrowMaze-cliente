@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow_segment.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
@@ -11,11 +12,14 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 class BoardBuilder {
   late BoardShape _shape;
   late int _difficulty;
+  late String _difficultyStr;
   late Random _random;
   final Map<String, Arrow> _arrows = {};
+  int? _calculatedMaxMoves;
 
   BoardBuilder({int? seed}) {
     _random = Random(seed);
+    _difficultyStr = 'EASY';
   }
 
   static BoardBuilder create({int? seed}) => BoardBuilder(seed: seed);
@@ -25,10 +29,15 @@ class BoardBuilder {
     return this;
   }
 
-  BoardBuilder setDifficulty(int difficulty) {
+  BoardBuilder setDifficulty(int difficulty, {String? difficultyStr}) {
     _difficulty = difficulty;
+    if (difficultyStr != null) {
+      _difficultyStr = difficultyStr;
+    }
     return this;
   }
+
+  int? getCalculatedMaxMoves() => _calculatedMaxMoves;
 
   BoardBuilder addArrow(Arrow arrow) {
     _arrows[arrow.id] = arrow;
@@ -53,6 +62,18 @@ class BoardBuilder {
       }
     }
 
+    // DEBUG: Print grid contents and arrow positions BEFORE building graph
+    debugPrint('=== GRID CONTENTS ===');
+    grid.forEach((key, arrowId) => debugPrint('  cell $key → arrow $arrowId'));
+    debugPrint('=== ARROWS HEAD POSITIONS ===');
+    _arrows.values.forEach((a) {
+      final head = a.getHead();
+      final pos = head.position;
+      final dir = a.getDirection();
+      debugPrint(
+          '  arrow ${a.id} head=${pos.toKey()} dir=(${dir.dx},${dir.dy})');
+    });
+
     final graph = BoardGraph.empty();
     graph.build(_arrows, grid, _shape);
 
@@ -67,16 +88,48 @@ class BoardBuilder {
   Board _generateAndBuild() {
     _arrows.clear();
 
-    // Try up to 300 times to generate a valid level
-    for (int attempt = 0; attempt < 300; attempt++) {
+    // Try up to 1000 times to generate a VALID puzzle (not all arrows free)
+    for (int attempt = 0; attempt < 1000; attempt++) {
       _arrows.clear();
       final generated = _generateArrows();
-      if (generated) {
-        break;
+      if (!generated) continue;
+
+      // Build board and graph to check if it's a valid puzzle
+      final board = _buildWithExistingArrows();
+      final activatable = board.graph.getActivatable();
+      final totalArrows = _arrows.length;
+
+      debugPrint(
+          '🧪 Generation attempt $attempt: $totalArrows arrows, ${activatable.length} activatable');
+
+      // Valid puzzle = NOT all arrows are free AND have at least 4 arrows
+      if (activatable.length < totalArrows && totalArrows > 3) {
+        debugPrint('✅ Valid puzzle found!');
+        // Calculate maxMoves
+        final margin = _difficultyStr == 'HARD'
+            ? 0.15
+            : _difficultyStr == 'MEDIUM'
+                ? 0.25
+                : 0.35;
+        _calculatedMaxMoves = (totalArrows * (1 + margin)).ceil();
+        return board;
       }
+
+      debugPrint(
+          '❌ Invalid: all arrows free or too few arrows, retrying...');
     }
 
-    return _buildWithExistingArrows();
+    // Fallback: use the last generated board even if not ideal
+    debugPrint('⚠️  Max attempts reached, using last generated board');
+    final board = _buildWithExistingArrows();
+    final totalArrows = _arrows.length;
+    final margin = _difficultyStr == 'HARD'
+        ? 0.15
+        : _difficultyStr == 'MEDIUM'
+            ? 0.25
+            : 0.35;
+    _calculatedMaxMoves = (totalArrows * (1 + margin)).ceil();
+    return board;
   }
 
   bool _generateArrows() {
@@ -164,6 +217,16 @@ class BoardBuilder {
 
   List<Position> _growPath(
       Position start, int maxLen, Set<String> remaining) {
+    debugPrint(
+        'growPath: remaining=${remaining.length} start=${start.toKey()}');
+
+    // Debug: Check remaining keys format
+    if (remaining.isNotEmpty) {
+      debugPrint('  remaining keys sample: ${remaining.take(5).toList()}');
+      final neighborKey = Position(1, 0).toKey();
+      debugPrint('  neighbor key format: "$neighborKey"');
+    }
+
     final path = [start];
     final used = {start.toKey()};
 
@@ -180,18 +243,30 @@ class BoardBuilder {
       bool added = false;
       for (final dir in dirs) {
         final next = curr.translate(dir);
-        if (remaining.contains(next.toKey()) &&
-            !used.contains(next.toKey())) {
+        final nextKey = next.toKey();
+        final inRemaining = remaining.contains(nextKey);
+        final notUsed = !used.contains(nextKey);
+
+        debugPrint(
+            '  trying dir (${dir.dx},${dir.dy}) → next=$nextKey inRemaining=$inRemaining notUsed=$notUsed');
+
+        if (inRemaining && notUsed) {
+          debugPrint('    ✅ Added to path');
           path.add(next);
-          used.add(next.toKey());
+          used.add(nextKey);
           added = true;
           break;
         }
       }
 
-      if (!added) break;
+      if (!added) {
+        debugPrint('  ❌ No valid direction found, path length=${path.length}');
+        break;
+      }
     }
 
+    debugPrint(
+        'growPath result: path of length ${path.length}');
     return path;
   }
 
