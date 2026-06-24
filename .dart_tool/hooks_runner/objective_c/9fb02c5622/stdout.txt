@@ -1,0 +1,53 @@
+Running `(cd /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/; TMPDIR=/var/folders/0s/hwkf_h4j2dl_h76wsf7zv6y80000gn/T/ PATH=/Users/valeriariera/.local/bin:/Users/valeriariera/.antigravity-ide/antigravity-ide/bin:/Users/valeriariera/Documents/uni/proyectos/develop/flutter/bin:/Users/valeriariera/.nvm/versions/node/v24.13.1/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Users/valeriariera/Documents/uni/proyectos/flutter/bin:/Users/valeriariera/flutter/bin:/Users/valeriariera/.local/bin:/Users/valeriariera/.antigravity-ide/antigravity-ide/bin:/Users/valeriariera/Documents/uni/proyectos/develop/flutter/bin:/Users/valeriariera/.nvm/versions/node/v24.13.1/bin:/Users/valeriariera/.lmstudio/bin:/Users/valeriariera/.lmstudio/bin HOME=/Users/valeriariera /Users/valeriariera/Documents/uni/proyectos/develop/flutter/bin/cache/dart-sdk/bin/dart '--packages=/Users/valeriariera/arrowMaze-cliente copy/.dart_tool/package_config.json' '/Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/objective_c/9fb02c5622/hook.dill' '--config=/Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/objective_c/9fb02c5622/input.json' )`.
+INFO: 2026-06-24 12:27:16.528247: No compiler set in BuildInput.cCompiler.cc. Falling back to assuming clang is in the PATH.
+
+INFO: 2026-06-24 12:27:16.530714: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/include/dart_api_dl.c -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/include/dart_api_dl.c.o
+
+INFO: 2026-06-24 12:27:16.531443: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c.c -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.c.o
+
+INFO: 2026-06-24 12:27:16.531556: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/input_stream_adapter.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/input_stream_adapter.m.o
+
+INFO: 2026-06-24 12:27:16.531640: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.m.o
+
+INFO: 2026-06-24 12:27:16.531717: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/observer.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/observer.m.o
+
+INFO: 2026-06-24 12:27:16.531791: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/ns_number.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/ns_number.m.o
+
+INFO: 2026-06-24 12:27:16.531865: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/protocol.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/protocol.m.o
+
+INFO: 2026-06-24 12:27:16.531943: Running: clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 -x objective-c -fobjc-arc -c /Users/valeriariera/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c_bindings_generated.m -fpic -gline-tables-only -I src -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c_bindings_generated.m.o
+
+INFO: 2026-06-24 12:27:16.734426: 
+INFO: 2026-06-24 12:27:16.734436: 
+INFO: 2026-06-24 12:27:16.734444: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.c.o
+
+dl.c.o
+
+INFO: 2026-06-24 12:27:16.737259: 
+INFO: 2026-06-24 12:27:16.737288: 
+INFO: 2026-06-24 12:27:16.737298: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/observer.m.o
+
+INFO: 2026-06-24 12:27:16.740880: 
+INFO: 2026-06-24 12:27:16.740905: 
+INFO: 2026-06-24 12:27:16.740913: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/protocol.m.o
+
+INFO: 2026-06-24 12:27:16.934195: 
+INFO: 2026-06-24 12:27:16.934232: 
+INFO: 2026-06-24 12:27:16.934251: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/ns_number.m.o
+
+INFO: 2026-06-24 12:27:16.940262: 
+INFO: 2026-06-24 12:27:16.940303: 
+INFO: 2026-06-24 12:27:16.940312: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.m.o
+
+INFO: 2026-06-24 12:27:16.942029: 
+INFO: 2026-06-24 12:27:16.942053: 
+INFO: 2026-06-24 12:27:16.942062: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/input_stream_adapter.m.o
+
+INFO: 2026-06-24 12:27:16.952564: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c_bindings_generated.m.o
+
+INFO: 2026-06-24 12:27:16.952801: Running: clang -shared -Wl,-encryptable -undefined dynamic_lookup -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk -target arm64-apple-darwin -mmacos-version-min=12 /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/include/dart_api_dl.c.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.c.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/input_stream_adapter.m.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c.m.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/observer.m.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/ns_number.m.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/protocol.m.o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/obj/src/objective_c_bindings_generated.m.o -o /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/objective_c.dylib
+
+INFO: 2026-06-24 12:27:17.056689: 
+INFO: 2026-06-24 12:27:17.056753: 
+INFO: 2026-06-24 12:27:17.056764: Generated /Users/valeriariera/arrowMaze-cliente copy/.dart_tool/hooks_runner/shared/objective_c/build/9fb02c5622/objective_c.dylib
+
