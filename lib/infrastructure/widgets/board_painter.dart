@@ -9,8 +9,7 @@ enum FlashType { ok, fail }
 class BoardPainter extends CustomPainter {
   final Board board;
   final Set<String> activatableArrows;
-  final String? flashingArrowId;
-  final FlashType? flashType;
+  final Map<String, FlashType> flashMap;
   final double cellSize;
   final int minX;
   final int minY;
@@ -22,8 +21,7 @@ class BoardPainter extends CustomPainter {
     required this.cellSize,
     required this.minX,
     required this.minY,
-    this.flashingArrowId,
-    this.flashType,
+    required this.flashMap,
     this.exitingArrows,
   });
 
@@ -47,14 +45,14 @@ class BoardPainter extends CustomPainter {
 
     // 3. Draw static arrows
     for (final arrow in board.arrows.values) {
-      final isActivatable = activatableArrows.contains(arrow.id);
-
       final color = Color(
         int.parse(arrow.color.value.replaceFirst('#', ''), radix: 16) |
             0xFF000000,
       );
 
-      final alpha = isActivatable ? 1.0 : 0.28;
+      // All arrows are bright - blocked arrows show red flash when tapped
+      final alpha = 1.0;
+      final flashType = flashMap[arrow.id];
 
       _drawArrow(canvas, arrow, color, alpha, flashType);
     }
@@ -174,8 +172,7 @@ class BoardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(BoardPainter oldDelegate) {
-    return oldDelegate.flashingArrowId != flashingArrowId ||
-        oldDelegate.flashType != flashType ||
+    return oldDelegate.flashMap != flashMap ||
         oldDelegate.exitingArrows != exitingArrows ||
         oldDelegate.board != board;
   }

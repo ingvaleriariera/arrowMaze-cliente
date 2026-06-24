@@ -217,14 +217,18 @@ class BoardBuilder {
 
   List<Position> _growPath(
       Position start, int maxLen, Set<String> remaining) {
-    debugPrint(
-        'growPath: remaining=${remaining.length} start=${start.toKey()}');
+    final shouldLog = remaining.length > 3;
 
-    // Debug: Check remaining keys format
-    if (remaining.isNotEmpty) {
-      debugPrint('  remaining keys sample: ${remaining.take(5).toList()}');
-      final neighborKey = Position(1, 0).toKey();
-      debugPrint('  neighbor key format: "$neighborKey"');
+    if (shouldLog) {
+      debugPrint(
+          'growPath: remaining=${remaining.length} start=${start.toKey()}');
+
+      // Debug: Check remaining keys format
+      if (remaining.isNotEmpty) {
+        debugPrint('  remaining keys sample: ${remaining.take(5).toList()}');
+        final neighborKey = Position(1, 0).toKey();
+        debugPrint('  neighbor key format: "$neighborKey"');
+      }
     }
 
     final path = [start];
@@ -247,11 +251,15 @@ class BoardBuilder {
         final inRemaining = remaining.contains(nextKey);
         final notUsed = !used.contains(nextKey);
 
-        debugPrint(
-            '  trying dir (${dir.dx},${dir.dy}) → next=$nextKey inRemaining=$inRemaining notUsed=$notUsed');
+        if (shouldLog) {
+          debugPrint(
+              '  trying dir (${dir.dx},${dir.dy}) → next=$nextKey inRemaining=$inRemaining notUsed=$notUsed');
+        }
 
         if (inRemaining && notUsed) {
-          debugPrint('    ✅ Added to path');
+          if (shouldLog) {
+            debugPrint('    ✅ Added to path');
+          }
           path.add(next);
           used.add(nextKey);
           added = true;
@@ -260,13 +268,16 @@ class BoardBuilder {
       }
 
       if (!added) {
-        debugPrint('  ❌ No valid direction found, path length=${path.length}');
+        if (shouldLog) {
+          debugPrint('  ❌ No valid direction found, path length=${path.length}');
+        }
         break;
       }
     }
 
-    debugPrint(
-        'growPath result: path of length ${path.length}');
+    if (shouldLog) {
+      debugPrint('growPath result: path of length ${path.length}');
+    }
     return path;
   }
 

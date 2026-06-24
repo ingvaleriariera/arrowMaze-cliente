@@ -1,19 +1,20 @@
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 
 class GameState {
   final GameSession? session;
   final GameProgress? progress;
   final bool isLoading;
   final String? error;
-  final String? lastFailedArrowId;
+  final Map<String, FlashType> flashMap; // arrowId → flash type
 
   const GameState({
     this.session,
     this.progress,
     this.isLoading = false,
     this.error,
-    this.lastFailedArrowId,
+    this.flashMap = const {},
   });
 
   GameState copyWith({
@@ -21,14 +22,14 @@ class GameState {
     GameProgress? progress,
     bool? isLoading,
     String? error,
-    String? lastFailedArrowId,
+    Map<String, FlashType>? flashMap,
   }) {
     return GameState(
       session: session ?? this.session,
       progress: progress ?? this.progress,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
-      lastFailedArrowId: lastFailedArrowId ?? this.lastFailedArrowId,
+      flashMap: flashMap ?? this.flashMap,
     );
   }
 

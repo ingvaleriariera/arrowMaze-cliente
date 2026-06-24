@@ -18,22 +18,14 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen>
-    with TickerProviderStateMixin {
+class _GameScreenState extends ConsumerState<GameScreen> {
   bool _showPause = false;
   bool _loadInitiated = false;
-  late AnimationController _flashController;
-  String? _flashingArrowId;
 
   @override
   void initState() {
     super.initState();
     debugPrint('🎮 GameScreen.initState: levelId=${widget.levelId}');
-
-    _flashController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_loadInitiated) {
@@ -44,11 +36,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
     });
   }
 
-  @override
-  void dispose() {
-    _flashController.dispose();
-    super.dispose();
-  }
 
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
@@ -66,15 +53,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
     debugPrint('   isLoading=${gameState.isLoading}');
     debugPrint('   session=${gameState.session != null ? "exists" : "null"}');
 
-    // Handle lastFailedArrowId change to trigger flash animation
-    ref.listen(gameNotifierProvider, (previous, next) {
-      if (next.lastFailedArrowId != null &&
-          next.lastFailedArrowId != previous?.lastFailedArrowId) {
-        debugPrint('🔴 GameScreen: Flash animation for ${next.lastFailedArrowId}');
-        _flashingArrowId = next.lastFailedArrowId;
-        _flashController.forward(from: 0.0);
-      }
-    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (gameState.session != null) {
@@ -176,22 +154,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               gameNotifier.activateArrow(arrowId);
                             }
                           },
-                          child: AnimatedBuilder(
-                            animation: _flashController,
-                            builder: (context, child) {
-                              return CustomPaint(
-                                painter: BoardPainter(
-                                  board: board,
-                                  activatableArrows: activatableSet,
-                                  cellSize: cellSize,
-                                  minX: minX,
-                                  minY: minY,
-                                  flashingArrowId: _flashingArrowId,
-                                  flashType: _flashController.isAnimating ? FlashType.fail : null,
-                                ),
-                                size: Size(gridWidth, gridHeight),
-                              );
-                            },
+                          child: CustomPaint(
+                            painter: BoardPainter(
+                              board: board,
+                              activatableArrows: activatableSet,
+                              cellSize: cellSize,
+                              minX: minX,
+                              minY: minY,
+                              flashMap: gameState.flashMap,
+                            ),
+                            size: Size(gridWidth, gridHeight),
                           ),
                         ),
                       ),

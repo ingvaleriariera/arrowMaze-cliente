@@ -12,6 +12,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progr
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 
 class GameNotifier extends StateNotifier<GameState> {
   final LoadLevelUseCase loadLevelUseCase;
@@ -83,8 +84,19 @@ class GameNotifier extends StateNotifier<GameState> {
       debugPrint('   isActivatable=$isActivatable');
 
       if (!isActivatable) {
-        debugPrint('❌ GameNotifier: Arrow is BLOCKED, cannot fire');
-        state = state.copyWith(lastFailedArrowId: arrowId);
+        debugPrint('❌ GameNotifier: Arrow is BLOCKED, flashing red for 500ms');
+
+        // Start flash
+        final newFlashMap = Map<String, FlashType>.from(state.flashMap);
+        newFlashMap[arrowId] = FlashType.fail;
+        state = state.copyWith(flashMap: newFlashMap);
+
+        // Remove flash after 500ms
+        await Future.delayed(const Duration(milliseconds: 500));
+        final updatedFlashMap = Map<String, FlashType>.from(state.flashMap);
+        updatedFlashMap.remove(arrowId);
+        state = state.copyWith(flashMap: updatedFlashMap);
+
         return; // Don't execute move
       }
 
@@ -94,10 +106,7 @@ class GameNotifier extends StateNotifier<GameState> {
 
       if (result.success) {
         debugPrint('✅ GameNotifier: Move executed successfully');
-        state = state.copyWith(
-          session: state.session,
-          lastFailedArrowId: null,
-        );
+        state = state.copyWith(session: state.session);
 
         if (state.session!.state is VictoryState ||
             state.session!.state is DefeatState) {
@@ -109,7 +118,15 @@ class GameNotifier extends StateNotifier<GameState> {
       } else {
         // This shouldn't happen if isActivatable check passed
         debugPrint('❌ GameNotifier: Move failed unexpectedly');
-        state = state.copyWith(lastFailedArrowId: arrowId);
+
+        final newFlashMap = Map<String, FlashType>.from(state.flashMap);
+        newFlashMap[arrowId] = FlashType.fail;
+        state = state.copyWith(flashMap: newFlashMap);
+
+        await Future.delayed(const Duration(milliseconds: 500));
+        final updatedFlashMap = Map<String, FlashType>.from(state.flashMap);
+        updatedFlashMap.remove(arrowId);
+        state = state.copyWith(flashMap: updatedFlashMap);
       }
     } catch (e) {
       debugPrint('❌ GameNotifier.activateArrow: Exception - $e');
