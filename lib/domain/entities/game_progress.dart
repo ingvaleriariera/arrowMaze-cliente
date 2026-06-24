@@ -6,10 +6,12 @@ class GameProgress {
 
   GameProgress({
     required this.userId,
-    this.completedLevels = const [],
-    this.bestScores = const {},
+    List<String>? completedLevels,
+    Map<String, int>? bestScores,
     this.coins = 0,
-  });
+  })
+      : completedLevels = completedLevels ?? [],
+        bestScores = bestScores ?? {};
 
   bool isCompleted(String levelId) => completedLevels.contains(levelId);
 
