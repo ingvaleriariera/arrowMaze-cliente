@@ -7,6 +7,9 @@ class LevelRepositoryImpl implements ILevelRepository {
   final ApiClient apiClient;
   final LevelMapper levelMapper;
 
+  // Cache for levels to avoid repeated API calls
+  List<Level>? _levelsCache;
+
   LevelRepositoryImpl({
     required this.apiClient,
     required this.levelMapper,
@@ -14,21 +17,34 @@ class LevelRepositoryImpl implements ILevelRepository {
 
   @override
   Future<Level> getLevel(String levelId) async {
-    final json = await apiClient.get('/levels/$levelId');
-    return levelMapper.fromJson(json);
+    // First try to get from cache
+    _levelsCache ??= await getLevels();
+    
+    try {
+      return _levelsCache!.firstWhere((level) => level.id == levelId);
+    } catch (e) {
+      // If not in cache, try direct API call
+      final json = await apiClient.get('/api/v1/levels/$levelId');
+      return levelMapper.fromJson(json);
+    }
   }
 
   @override
   Future<List<Level>> getLevels() async {
-    final json = await apiClient.get('/levels');
-    final list = json['levels'] as List<dynamic>;
-    return levelMapper.fromJsonList(list);
+    try {
+      final json = await apiClient.get('/api/v1/levels');
+      final list = json['levels'] as List<dynamic>? ?? json as List<dynamic>;
+      _levelsCache = levelMapper.fromJsonList(list);
+      return _levelsCache!;
+    } catch (e) {
+      // If API call fails, return empty list
+      return [];
+    }
   }
 
   @override
   Future<List<Level>> getLevelsByDifficulty(String difficulty) async {
-    final json = await apiClient.get('/levels?difficulty=$difficulty');
-    final list = json['levels'] as List<dynamic>;
-    return levelMapper.fromJsonList(list);
+    final allLevels = await getLevels();
+    return allLevels.where((level) => level.difficulty == difficulty).toList();
   }
 }

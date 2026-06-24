@@ -17,7 +17,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
   @override
   Future<AuthResultDTO> login(String email, String password) async {
-    final json = await apiClient.post('/auth/login', {
+    final json = await apiClient.post('/api/v1/auth/login', {
       'email': email,
       'password': password,
     });
@@ -34,7 +34,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
   @override
   Future<AuthResultDTO> register(String email, String username, String password) async {
-    final json = await apiClient.post('/auth/register', {
+    final json = await apiClient.post('/api/v1/auth/register', {
       'email': email,
       'username': username,
       'password': password,

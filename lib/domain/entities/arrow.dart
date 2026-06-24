@@ -13,7 +13,7 @@ class Arrow {
     required this.color,
   }) : assert(segments.length > 0, 'Arrow must have at least one segment');
 
-  ArrowSegment getHead() => segments.first;
+  ArrowSegment getHead() => segments.last;
 
   Direction getDirection() => getHead().directionToNext;
 

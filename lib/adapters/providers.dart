@@ -34,7 +34,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progr
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
-  baseUrl: 'https://api.arrow-maze.example.com',
+  baseUrl: 'http://localhost:3000',
 ));
 
 // Mappers

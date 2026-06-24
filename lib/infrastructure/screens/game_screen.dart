@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
+import 'package:arrow_maze_cliente_copy/adapters/notifiers/game_notifier.dart';
+import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
   final String levelId;
@@ -15,16 +18,40 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen> {
+class _GameScreenState extends ConsumerState<GameScreen>
+    with TickerProviderStateMixin {
   bool _showPause = false;
+  bool _loadInitiated = false;
+  late AnimationController _flashController;
+  String? _flashingArrowId;
 
   @override
   void initState() {
     super.initState();
-    _loadLevel();
+    debugPrint('🎮 GameScreen.initState: levelId=${widget.levelId}');
+
+    _flashController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_loadInitiated) {
+        _loadInitiated = true;
+        debugPrint('📋 GameScreen: Post-frame callback, calling loadLevel');
+        _loadLevel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _flashController.dispose();
+    super.dispose();
   }
 
   void _loadLevel() {
+    debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
     gameNotifier.loadLevel(widget.levelId, 'user_123');
   }
@@ -35,12 +62,27 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     final gameState = ref.watch(gameNotifierProvider);
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
 
-    // Check for game state transitions
+    debugPrint('🎨 GameScreen.build:');
+    debugPrint('   isLoading=${gameState.isLoading}');
+    debugPrint('   session=${gameState.session != null ? "exists" : "null"}');
+
+    // Handle lastFailedArrowId change to trigger flash animation
+    ref.listen(gameNotifierProvider, (previous, next) {
+      if (next.lastFailedArrowId != null &&
+          next.lastFailedArrowId != previous?.lastFailedArrowId) {
+        debugPrint('🔴 GameScreen: Flash animation for ${next.lastFailedArrowId}');
+        _flashingArrowId = next.lastFailedArrowId;
+        _flashController.forward(from: 0.0);
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (gameState.session != null) {
         if (gameState.session!.state is VictoryState) {
+          debugPrint('🏆 GameScreen: Victory');
           context.go('/victory');
         } else if (gameState.session!.state is DefeatState) {
+          debugPrint('💀 GameScreen: Defeat');
           context.go('/defeat');
         }
       }
@@ -48,110 +90,195 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${l10n.translate('moves')}: ${gameState.session?.movesUsed ?? 0}/${gameState.session?.maxMoves ?? 0}'),
+        title: Text('${l10n.translate('moves')}: ${gameState.session?.moves ?? 0}/${gameState.session?.maxMoves ?? 0}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.pause),
-            onPressed: () => setState(() => _showPause = true),
+            onPressed: gameState.session == null ? null : () => setState(() => _showPause = true),
           ),
         ],
       ),
-      body: gameState.session == null
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F5A0)))
-          : Stack(
-              children: [
-                Column(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        color: const Color(0xFF0d0d18),
-                        child: Center(
-                          child: Text(
-                            'Game Board\n${gameState.session?.levelId}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white70),
+      body: _buildBody(gameState, gameNotifier),
+    );
+  }
+
+  Widget _buildBody(GameState gameState, GameNotifier gameNotifier) {
+    if (gameState.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF00F5A0)),
+      );
+    }
+
+    if (gameState.error != null) {
+      return Center(child: Text('Error: ${gameState.error}'));
+    }
+
+    if (gameState.session == null) {
+      return const Center(child: Text('Failed to load game'));
+    }
+
+    final session = gameState.session!;
+    final board = session.board;
+    final shape = board.shape;
+    final validCells = shape.getCells();
+
+    // Get activatable arrows
+    final activatableSet = <String>{};
+    for (final arrowId in board.graph.getActivatable()) {
+      activatableSet.add(arrowId);
+    }
+
+    // Calculate grid dimensions
+    int minX = 0, maxX = 0, minY = 0, maxY = 0;
+    for (final cell in validCells) {
+      if (cell == validCells.first) {
+        minX = cell.x;
+        maxX = cell.x;
+        minY = cell.y;
+        maxY = cell.y;
+      } else {
+        minX = cell.x < minX ? cell.x : minX;
+        maxX = cell.x > maxX ? cell.x : maxX;
+        minY = cell.y < minY ? cell.y : minY;
+        maxY = cell.y > maxY ? cell.y : maxY;
+      }
+    }
+    final cols = maxX - minX + 1;
+    final rows = maxY - minY + 1;
+
+    return Stack(
+      children: [
+        Column(
+          children: [
+            // Board area
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final cellSize = (constraints.maxWidth / cols).clamp(20.0, 200.0);
+                  final gridWidth = cellSize * cols;
+                  final gridHeight = cellSize * rows;
+
+                  return Container(
+                    color: const Color(0xFF0d0d18),
+                    child: Center(
+                      child: SizedBox(
+                        width: gridWidth,
+                        height: gridHeight,
+                        child: GestureDetector(
+                          onTapDown: (details) {
+                            final gridX = (details.localPosition.dx / cellSize).floor() + minX;
+                            final gridY = (details.localPosition.dy / cellSize).floor() + minY;
+                            debugPrint('🖱️ Tap at ($gridX, $gridY)');
+
+                            final arrowId = board.grid['$gridX,$gridY'];
+                            if (arrowId != null) {
+                              debugPrint('🎯 Arrow tapped: $arrowId');
+                              gameNotifier.activateArrow(arrowId);
+                            }
+                          },
+                          child: AnimatedBuilder(
+                            animation: _flashController,
+                            builder: (context, child) {
+                              return CustomPaint(
+                                painter: BoardPainter(
+                                  board: board,
+                                  activatableArrows: activatableSet,
+                                  cellSize: cellSize,
+                                  minX: minX,
+                                  minY: minY,
+                                  flashingArrowId: _flashingArrowId,
+                                  flashType: _flashController.isAnimating ? FlashType.fail : null,
+                                ),
+                                size: Size(gridWidth, gridHeight),
+                              );
+                            },
                           ),
                         ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      color: const Color(0xFF1a1a2e),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () {},
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00F5A0),
-                              foregroundColor: Colors.black,
-                            ),
-                            child: Text(l10n.translate('hint')),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {},
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00F5A0),
-                              foregroundColor: Colors.black,
-                            ),
-                            child: Text(l10n.translate('hammer')),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {},
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00F5A0),
-                              foregroundColor: Colors.black,
-                            ),
-                            child: Text(l10n.translate('magnet')),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (_showPause)
-                  Scaffold(
-                    backgroundColor: Colors.black54,
-                    body: Center(
-                      child: Card(
-                        color: const Color(0xFF1a1a2e),
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                l10n.translate('pause'),
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 32),
-                              ElevatedButton(
-                                onPressed: () {
-                                  gameNotifier.resume();
-                                  setState(() => _showPause = false);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00F5A0),
-                                  foregroundColor: Colors.black,
-                                ),
-                                child: Text(l10n.translate('resume')),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: () => context.go('/levels'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.grey,
-                                ),
-                                child: const Text('Exit'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                  );
+                },
+              ),
             ),
+            // Controls
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: const Color(0xFF1a1a2e),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F5A0),
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Hint'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F5A0),
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Hammer'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F5A0),
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Magnet'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        // Pause overlay
+        if (_showPause)
+          Scaffold(
+            backgroundColor: Colors.black54,
+            body: Center(
+              child: Card(
+                color: const Color(0xFF1a1a2e),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Paused',
+                        style: TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton(
+                        onPressed: () {
+                          gameNotifier.resume();
+                          setState(() => _showPause = false);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00F5A0),
+                          foregroundColor: Colors.black,
+                        ),
+                        child: const Text('Resume'),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => context.go('/levels'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey),
+                        child: const Text('Exit'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

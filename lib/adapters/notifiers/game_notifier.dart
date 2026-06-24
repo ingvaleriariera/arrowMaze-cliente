@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
@@ -11,7 +12,6 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progr
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
-import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 
 class GameNotifier extends StateNotifier<GameState> {
   final LoadLevelUseCase loadLevelUseCase;
@@ -35,19 +35,36 @@ class GameNotifier extends StateNotifier<GameState> {
   }) : super(const GameState());
 
   Future<void> loadLevel(String levelId, String userId) async {
+    debugPrint('🎮 GameNotifier.loadLevel: Called with levelId=$levelId, userId=$userId');
+    
     state = state.copyWith(isLoading: true, error: null);
+    debugPrint('   State set to isLoading=true');
+
     try {
+      debugPrint('📞 GameNotifier: Calling loadLevelUseCase.execute($levelId)');
       final session = await loadLevelUseCase.execute(levelId);
-      // Load progress from local storage (in a real app)
+      
+      debugPrint('✅ GameNotifier: LoadLevelUseCase returned session');
+      debugPrint('   Session: levelId=${session.levelId}, maxMoves=${session.maxMoves}');
+
+      debugPrint('🔄 GameNotifier: Updating state with session');
       state = state.copyWith(
         session: session,
         isLoading: false,
       );
+      
+      debugPrint('✅ GameNotifier.loadLevel: State updated successfully');
+      debugPrint('   Current state: isLoading=${state.isLoading}, session=${state.session != null ? "exists" : "null"}');
 
       if (session.isTimedLevel()) {
+        debugPrint('⏱️  GameNotifier: Level is timed, would start timer here');
         _startTimer();
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ GameNotifier.loadLevel: Exception caught');
+      debugPrint('   Exception: $e');
+      debugPrint('   StackTrace: $stackTrace');
+      
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -59,11 +76,27 @@ class GameNotifier extends StateNotifier<GameState> {
     if (state.session == null) return;
 
     try {
+      debugPrint('🎯 GameNotifier.activateArrow: Trying to activate $arrowId');
+
+      // CHECK FIRST: Is this arrow activatable?
+      final isActivatable = state.session!.board.graph.isActivatable(arrowId);
+      debugPrint('   isActivatable=$isActivatable');
+
+      if (!isActivatable) {
+        debugPrint('❌ GameNotifier: Arrow is BLOCKED, cannot fire');
+        state = state.copyWith(lastFailedArrowId: arrowId);
+        return; // Don't execute move
+      }
+
+      // Arrow is activatable, execute the move
+      debugPrint('✅ GameNotifier: Arrow is activatable, executing move');
       final result = await activateArrowUseCase.execute(state.session!, arrowId);
 
       if (result.success) {
+        debugPrint('✅ GameNotifier: Move executed successfully');
         state = state.copyWith(
           session: state.session,
+          lastFailedArrowId: null,
         );
 
         if (state.session!.state is VictoryState ||
@@ -73,8 +106,13 @@ class GameNotifier extends StateNotifier<GameState> {
             await saveProgressUseCase.execute(state.progress!);
           }
         }
+      } else {
+        // This shouldn't happen if isActivatable check passed
+        debugPrint('❌ GameNotifier: Move failed unexpectedly');
+        state = state.copyWith(lastFailedArrowId: arrowId);
       }
     } catch (e) {
+      debugPrint('❌ GameNotifier.activateArrow: Exception - $e');
       state = state.copyWith(error: e.toString());
     }
   }
@@ -119,6 +157,7 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void _startTimer() {
+    debugPrint('⏱️  GameNotifier._startTimer: Starting timer');
     _stopTimer();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (state.session != null && state.session!.isPlaying()) {
@@ -133,6 +172,7 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void _stopTimer() {
+    debugPrint('⏱️  GameNotifier._stopTimer: Stopping timer');
     _timer?.cancel();
     _timer = null;
   }

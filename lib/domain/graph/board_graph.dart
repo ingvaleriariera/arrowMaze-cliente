@@ -1,7 +1,6 @@
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
 import 'package:arrow_maze_cliente_copy/domain/graph/arrow_node.dart';
-import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 
 class BoardGraph {
   final Map<String, ArrowNode> nodes;
@@ -25,19 +24,22 @@ class BoardGraph {
       );
     }
 
-    // For each arrow, scan its exit path
+    // For each arrow, scan its exit path from the HEAD
     for (final arrow in arrows.values) {
       var position = arrow.getHead().position;
       final direction = arrow.getDirection();
 
-      // Scan from head in the direction until we hit an exit
+      // Scan from head in direction until we hit an exit
+      // Continue scanning entire path — do NOT break at first blocker
       while (!shape.isExitFrom(position, direction)) {
         position = position.translate(direction);
 
         // Check if another arrow occupies this position
-        final arrowAtPosition = grid[position.toKey()];
-        if (arrowAtPosition != null && arrowAtPosition != arrow.id) {
-          nodes[arrow.id]!.blockedBy.add(arrowAtPosition);
+        final occupiedByArrowId = grid[position.toKey()];
+        if (occupiedByArrowId != null && occupiedByArrowId != arrow.id) {
+          // Found a blocker — add it but CONTINUE scanning
+          nodes[arrow.id]!.blockedBy.add(occupiedByArrowId);
+          // DO NOT break — keep scanning the entire path
         }
       }
     }

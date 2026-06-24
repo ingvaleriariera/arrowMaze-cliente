@@ -6,12 +6,14 @@ class GameState {
   final GameProgress? progress;
   final bool isLoading;
   final String? error;
+  final String? lastFailedArrowId;
 
   const GameState({
     this.session,
     this.progress,
     this.isLoading = false,
     this.error,
+    this.lastFailedArrowId,
   });
 
   GameState copyWith({
@@ -19,12 +21,14 @@ class GameState {
     GameProgress? progress,
     bool? isLoading,
     String? error,
+    String? lastFailedArrowId,
   }) {
     return GameState(
       session: session ?? this.session,
       progress: progress ?? this.progress,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
+      lastFailedArrowId: lastFailedArrowId ?? this.lastFailedArrowId,
     );
   }
 

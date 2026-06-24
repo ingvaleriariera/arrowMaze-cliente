@@ -17,11 +17,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _passwordController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(_onInputChanged);
+    _usernameController.addListener(_onInputChanged);
+    _passwordController.addListener(_onInputChanged);
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onInputChanged() {
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    authNotifier.clearError();
   }
 
   void _handleRegister() async {
@@ -56,6 +69,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 40),
             TextField(
               controller: _emailController,
+              enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('email'),
                 border: const OutlineInputBorder(),
@@ -64,6 +78,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _usernameController,
+              enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('username'),
                 border: const OutlineInputBorder(),
@@ -73,6 +88,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             TextField(
               controller: _passwordController,
               obscureText: true,
+              enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('password'),
                 border: const OutlineInputBorder(),
@@ -80,13 +96,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
             const SizedBox(height: 24),
             if (authState.error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  authState.error!,
-                  style: const TextStyle(color: Colors.red),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  border: Border.all(color: Colors.red),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        authState.error!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

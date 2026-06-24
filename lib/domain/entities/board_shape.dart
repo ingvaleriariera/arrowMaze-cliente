@@ -7,20 +7,21 @@ class BoardShape {
 
   BoardShape({required this.validCells});
 
-  factory BoardShape.fromJson(String json) {
-    List<List<int>> grid = List<List<int>>.from(
-      jsonDecode(json).map((row) => List<int>.from(row)),
-    );
+  factory BoardShape.fromJson(String jsonString) {
+    final map = jsonDecode(jsonString) as Map<String, dynamic>;
+    final grid = map['grid'] as List<dynamic>;
+    final validCells = <String>{};
 
-    final cells = <String>{};
-    for (int y = 0; y < grid.length; y++) {
-      for (int x = 0; x < grid[y].length; x++) {
-        if (grid[y][x] == 1) {
-          cells.add('$x,$y');
+    for (int row = 0; row < grid.length; row++) {
+      final cols = grid[row] as List<dynamic>;
+      for (int col = 0; col < cols.length; col++) {
+        if (cols[col] == 1) {
+          validCells.add('$col,$row'); // x=col, y=row
         }
       }
     }
-    return BoardShape(validCells: cells);
+
+    return BoardShape(validCells: validCells);
   }
 
   bool contains(Position position) =>

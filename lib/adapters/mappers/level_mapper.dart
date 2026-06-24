@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow_segment.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/level.dart';
@@ -8,22 +10,59 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/time_limit.dart';
 
 class LevelMapper {
   Level fromJson(Map<String, dynamic> json) {
-    final timeSeconds = json['timeLimitSeconds'] as int?;
-    final timeLimit = timeSeconds != null && timeSeconds > 0
-        ? TimeLimit.of(timeSeconds)
-        : TimeLimit.none;
+    debugPrint('📍 LevelMapper.fromJson: Processing level ${json['id']}');
+    
+    try {
+      final timeSeconds = json['timeLimitSeconds'] as int?;
+      final timeLimit = timeSeconds != null && timeSeconds > 0
+          ? TimeLimit.of(timeSeconds)
+          : TimeLimit.none;
 
-    return Level(
-      id: json['id'] as String,
-      difficulty: json['difficulty'] as String,
-      boardLayout: json['boardLayout'] as String,
-      moveLimit: json['moveLimit'] as int,
-      timeLimit: timeLimit,
-    );
+      // Handle boardLayout - can be string or object
+      String boardLayout = '';
+      final layoutData = json['boardLayout'];
+      if (layoutData is String) {
+        boardLayout = layoutData;
+        debugPrint('   boardLayout is String: $boardLayout');
+      } else if (layoutData is Map || layoutData is List) {
+        boardLayout = jsonEncode(layoutData);
+        debugPrint('   boardLayout is Map/List, encoded to: $boardLayout');
+      } else {
+        debugPrint('   boardLayout has unexpected type: ${layoutData.runtimeType}');
+        boardLayout = '[[]]'; // Default empty board
+      }
+
+      final level = Level(
+        id: json['id'] as String,
+        difficulty: json['difficulty'] as String,
+        boardLayout: boardLayout,
+        moveLimit: json['moveLimit'] as int,
+        timeLimit: timeLimit,
+      );
+      
+      debugPrint('✅ LevelMapper: Successfully created Level(id=${level.id}, difficulty=${level.difficulty})');
+      return level;
+    } catch (e, stackTrace) {
+      debugPrint('❌ LevelMapper.fromJson: Error processing level');
+      debugPrint('   Exception: $e');
+      debugPrint('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
   List<Level> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((json) => fromJson(json as Map<String, dynamic>)).toList();
+    debugPrint('📍 LevelMapper.fromJsonList: Processing ${jsonList.length} levels');
+    
+    try {
+      final levels = jsonList.map((json) => fromJson(json as Map<String, dynamic>)).toList();
+      debugPrint('✅ LevelMapper: Successfully processed ${levels.length} levels');
+      return levels;
+    } catch (e, stackTrace) {
+      debugPrint('❌ LevelMapper.fromJsonList: Error processing list');
+      debugPrint('   Exception: $e');
+      debugPrint('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 
   Arrow arrowFromJson(Map<String, dynamic> json) {

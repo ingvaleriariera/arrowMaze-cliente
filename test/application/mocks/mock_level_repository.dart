@@ -5,30 +5,16 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/time_limit.dart';
 class MockLevelRepository implements ILevelRepository {
   @override
   Future<Level> getLevel(String levelId) async {
-    if (levelId == 'level_001') {
-      return Level(
+    final levels = await getLevels();
+    return levels.firstWhere(
+      (level) => level.id == levelId,
+      orElse: () => Level(
         id: levelId,
         difficulty: 'EASY',
         boardLayout: '[[1,1,1],[1,1,1],[1,1,1]]',
         moveLimit: 10,
         timeLimit: TimeLimit.none,
-      );
-    } else if (levelId == 'level_002') {
-      return Level(
-        id: levelId,
-        difficulty: 'MEDIUM',
-        boardLayout: '[[1,1,1,1],[1,1,1,1],[1,1,1,1]]',
-        moveLimit: 20,
-        timeLimit: TimeLimit.of(120),
-      );
-    }
-    // Default
-    return Level(
-      id: levelId,
-      difficulty: 'EASY',
-      boardLayout: '[[1,1,1],[1,1,1],[1,1,1]]',
-      moveLimit: 10,
-      timeLimit: TimeLimit.none,
+      ),
     );
   }
 
@@ -36,18 +22,25 @@ class MockLevelRepository implements ILevelRepository {
   Future<List<Level>> getLevels() async {
     return [
       Level(
-        id: 'level_001',
+        id: '550e8400-e29b-41d4-a716-446655440001',
         difficulty: 'EASY',
         boardLayout: '[[1,1,1],[1,1,1],[1,1,1]]',
         moveLimit: 10,
         timeLimit: TimeLimit.none,
       ),
       Level(
-        id: 'level_002',
+        id: '550e8400-e29b-41d4-a716-446655440002',
         difficulty: 'MEDIUM',
         boardLayout: '[[1,1,1,1],[1,1,1,1],[1,1,1,1]]',
         moveLimit: 20,
         timeLimit: TimeLimit.of(120),
+      ),
+      Level(
+        id: '550e8400-e29b-41d4-a716-446655440003',
+        difficulty: 'HARD',
+        boardLayout: '[[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1]]',
+        moveLimit: 15,
+        timeLimit: TimeLimit.of(60),
       ),
     ];
   }

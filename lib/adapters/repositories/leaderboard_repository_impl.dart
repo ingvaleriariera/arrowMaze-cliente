@@ -9,7 +9,7 @@ class LeaderboardRepositoryImpl implements ILeaderboardRepository {
 
   @override
   Future<List<LeaderboardEntryDTO>> getTopScores(String levelId, int limit) async {
-    final json = await apiClient.get('/leaderboard/$levelId?limit=$limit');
+    final json = await apiClient.get('/api/v1/leaderboard/$levelId?limit=$limit');
     final entriesList = json['entries'] as List<dynamic>? ?? [];
 
     return entriesList.map((entry) {
