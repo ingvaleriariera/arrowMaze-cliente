@@ -76,8 +76,8 @@ class BoardBuilder {
   Board _generateAndBuild() {
     _arrows.clear();
 
-    // Try up to 1000 times to generate a VALID puzzle (not all arrows free)
-    for (int attempt = 0; attempt < 1000; attempt++) {
+    // Try up to 300 times to generate a VALID puzzle (not all arrows free)
+    for (int attempt = 0; attempt < 300; attempt++) {
       _arrows.clear();
       final generated = _generateArrows();
       if (!generated) continue;
@@ -120,7 +120,7 @@ class BoardBuilder {
     return board;
   }
 
-  static const int _maxGenerationIterations = 2000;
+  static const int _maxGenerationIterations = 500;
 
   bool _generateArrows() {
     final remaining = Set<String>.from(_shape.validCells);

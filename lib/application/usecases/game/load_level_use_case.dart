@@ -41,7 +41,8 @@ class LoadLevelUseCase {
       'MEDIUM': 2,
       'HARD': 3,
     };
-    final difficultyInt = difficultyMap[level.difficulty] ?? 1;
+    final difficultyInt =
+        difficultyMap[level.difficulty.toUpperCase()] ?? 1;
 
     // Deterministic seed from levelId so every player sees the same arrow
     // layout for a given level (keeps leaderboard scores comparable).
