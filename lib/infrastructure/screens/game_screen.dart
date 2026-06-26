@@ -55,7 +55,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (gameState.session != null) {
+      // Don't react to a session left over from the previous level while
+      // this one is still loading.
+      if (!gameState.isLoading && gameState.session != null) {
         if (gameState.session!.state is VictoryState) {
           debugPrint('🏆 GameScreen: Victory');
           context.go('/victory');

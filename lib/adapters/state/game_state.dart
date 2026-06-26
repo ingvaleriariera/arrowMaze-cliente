@@ -19,13 +19,14 @@ class GameState {
 
   GameState copyWith({
     GameSession? session,
+    bool clearSession = false,
     GameProgress? progress,
     bool? isLoading,
     String? error,
     Map<String, FlashType>? flashMap,
   }) {
     return GameState(
-      session: session ?? this.session,
+      session: clearSession ? null : (session ?? this.session),
       progress: progress ?? this.progress,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,

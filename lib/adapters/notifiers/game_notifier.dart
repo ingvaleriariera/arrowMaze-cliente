@@ -38,8 +38,10 @@ class GameNotifier extends StateNotifier<GameState> {
   Future<void> loadLevel(String levelId, String userId) async {
     debugPrint('🎮 GameNotifier.loadLevel called with: $levelId');
     
-    state = state.copyWith(isLoading: true, error: null);
-    debugPrint('   State set to isLoading=true');
+    // Clear the previous session immediately so a stale VictoryState/
+    // DefeatState from the last level can't be shown while this one loads.
+    state = state.copyWith(isLoading: true, error: null, clearSession: true);
+    debugPrint('   State set to isLoading=true, session cleared');
 
     try {
       debugPrint('📞 GameNotifier: Calling loadLevelUseCase.execute($levelId)');

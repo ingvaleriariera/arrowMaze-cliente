@@ -113,11 +113,8 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
           onTap: () {
             debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
 
-            // Call loadLevel BEFORE navigating
-            debugPrint('   → Calling gameNotifier.loadLevel(${level.levelId})');
-            ref.read(gameNotifierProvider.notifier).loadLevel(level.levelId, 'user_123');
-
-            // Now navigate to game screen
+            // GameScreen.initState triggers the actual load for this levelId,
+            // so just navigate here to avoid a duplicate loadLevel() call.
             debugPrint('   → Navigating to /game/${level.levelId}');
             context.go('/game/${level.levelId}');
           },
