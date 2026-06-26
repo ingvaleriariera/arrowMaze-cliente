@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_router.dart';
@@ -33,6 +34,9 @@ class MyApp extends ConsumerWidget {
       ),
       localizationsDelegates: const [
         AppLocalizationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: AppRouter.router,
