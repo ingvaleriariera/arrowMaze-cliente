@@ -43,7 +43,9 @@ class LoadLevelUseCase {
     };
     final difficultyInt = difficultyMap[level.difficulty] ?? 1;
 
-    final builder = BoardBuilder.create()
+    // Deterministic seed from levelId so every player sees the same arrow
+    // layout for a given level (keeps leaderboard scores comparable).
+    final builder = BoardBuilder.create(seed: level.id.hashCode)
         .setShape(shape)
         .setDifficulty(difficultyInt, difficultyStr: level.difficulty);
 

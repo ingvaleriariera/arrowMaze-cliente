@@ -62,18 +62,6 @@ class BoardBuilder {
       }
     }
 
-    // DEBUG: Print grid contents and arrow positions BEFORE building graph
-    debugPrint('=== GRID CONTENTS ===');
-    grid.forEach((key, arrowId) => debugPrint('  cell $key → arrow $arrowId'));
-    debugPrint('=== ARROWS HEAD POSITIONS ===');
-    _arrows.values.forEach((a) {
-      final head = a.getHead();
-      final pos = head.position;
-      final dir = a.getDirection();
-      debugPrint(
-          '  arrow ${a.id} head=${pos.toKey()} dir=(${dir.dx},${dir.dy})');
-    });
-
     final graph = BoardGraph.empty();
     graph.build(_arrows, grid, _shape);
 
@@ -132,16 +120,20 @@ class BoardBuilder {
     return board;
   }
 
+  static const int _maxGenerationIterations = 2000;
+
   bool _generateArrows() {
     final remaining = Set<String>.from(_shape.validCells);
     final grid = <String, String>{};
     int failStreak = 0;
     int arrowIndex = 0;
+    int totalIterations = 0;
 
     final maxLen = _difficulty == 3 ? 7 : _difficulty == 2 ? 5 : 4;
 
     while (remaining.isNotEmpty) {
-      if (failStreak > 100) {
+      totalIterations++;
+      if (failStreak > 100 || totalIterations > _maxGenerationIterations) {
         return false;
       }
 
@@ -217,20 +209,6 @@ class BoardBuilder {
 
   List<Position> _growPath(
       Position start, int maxLen, Set<String> remaining) {
-    final shouldLog = remaining.length > 3;
-
-    if (shouldLog) {
-      debugPrint(
-          'growPath: remaining=${remaining.length} start=${start.toKey()}');
-
-      // Debug: Check remaining keys format
-      if (remaining.isNotEmpty) {
-        debugPrint('  remaining keys sample: ${remaining.take(5).toList()}');
-        final neighborKey = Position(1, 0).toKey();
-        debugPrint('  neighbor key format: "$neighborKey"');
-      }
-    }
-
     final path = [start];
     final used = {start.toKey()};
 
@@ -248,18 +226,8 @@ class BoardBuilder {
       for (final dir in dirs) {
         final next = curr.translate(dir);
         final nextKey = next.toKey();
-        final inRemaining = remaining.contains(nextKey);
-        final notUsed = !used.contains(nextKey);
 
-        if (shouldLog) {
-          debugPrint(
-              '  trying dir (${dir.dx},${dir.dy}) → next=$nextKey inRemaining=$inRemaining notUsed=$notUsed');
-        }
-
-        if (inRemaining && notUsed) {
-          if (shouldLog) {
-            debugPrint('    ✅ Added to path');
-          }
+        if (remaining.contains(nextKey) && !used.contains(nextKey)) {
           path.add(next);
           used.add(nextKey);
           added = true;
@@ -267,17 +235,9 @@ class BoardBuilder {
         }
       }
 
-      if (!added) {
-        if (shouldLog) {
-          debugPrint('  ❌ No valid direction found, path length=${path.length}');
-        }
-        break;
-      }
+      if (!added) break;
     }
 
-    if (shouldLog) {
-      debugPrint('growPath result: path of length ${path.length}');
-    }
     return path;
   }
 
