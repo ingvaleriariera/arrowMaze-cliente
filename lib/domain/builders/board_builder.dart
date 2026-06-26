@@ -76,8 +76,11 @@ class BoardBuilder {
   Board _generateAndBuild() {
     _arrows.clear();
 
-    // Try up to 300 times to generate a VALID puzzle (not all arrows free)
-    for (int attempt = 0; attempt < 300; attempt++) {
+    // Try up to 60 times to generate a VALID puzzle (not all arrows free).
+    // Each attempt rebuilds the whole board graph, so this is the most
+    // expensive loop in generation — keep it tight now that difficulty
+    // is mapped correctly and longer arrows make a valid puzzle easy to find.
+    for (int attempt = 0; attempt < 60; attempt++) {
       _arrows.clear();
       final generated = _generateArrows();
       if (!generated) continue;
@@ -120,7 +123,7 @@ class BoardBuilder {
     return board;
   }
 
-  static const int _maxGenerationIterations = 500;
+  static const int _maxGenerationIterations = 200;
 
   bool _generateArrows() {
     final remaining = Set<String>.from(_shape.validCells);

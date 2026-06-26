@@ -53,15 +53,18 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     debugPrint('   isLoading=${gameState.isLoading}');
     debugPrint('   session=${gameState.session != null ? "exists" : "null"}');
 
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Don't react to a session left over from the previous level while
-      // this one is still loading.
-      if (!gameState.isLoading && gameState.session != null) {
-        if (gameState.session!.state is VictoryState) {
+    // React to actual state transitions from the notifier, not to a
+    // snapshot captured by an arbitrary intermediate build(). A
+    // postFrameCallback closure here would capture whatever `gameState`
+    // was at the time of that particular build, including stale sessions
+    // from the previous level that are still in flight when this screen
+    // first mounts.
+    ref.listen<GameState>(gameNotifierProvider, (previous, next) {
+      if (!next.isLoading && next.session != null) {
+        if (next.session!.state is VictoryState) {
           debugPrint('🏆 GameScreen: Victory');
           context.go('/victory');
-        } else if (gameState.session!.state is DefeatState) {
+        } else if (next.session!.state is DefeatState) {
           debugPrint('💀 GameScreen: Defeat');
           context.go('/defeat');
         }
