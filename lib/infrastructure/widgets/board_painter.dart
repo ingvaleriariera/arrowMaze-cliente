@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
@@ -139,48 +138,14 @@ class BoardPainter extends CustomPainter {
     final hw = bw * 3.2;
     final hl = bw * 4.2;
 
-    // Subtle linear gradient running along the whole body (not just at
-    // curve joints), from a dimmer tail to a brighter head. The gradient's
-    // endpoints are the actual start/end of the drawn path, computed per
-    // branch below since the single-cell case draws a short stub rather
-    // than spanning between cell centers.
-    Shader gradientShaderFor(Offset start, Offset end) {
-      if (start == end) {
-        return ui.Gradient.linear(start, end + const Offset(0.01, 0.01),
-            [col.withAlpha((alpha * 255).toInt()), col.withAlpha((alpha * 255).toInt())]);
-      }
-      return ui.Gradient.linear(
-        start,
-        end,
-        [
-          col.withAlpha((alpha * 0.55 * 255).toInt()),
-          col.withAlpha((alpha * 255).toInt()),
-        ],
-      );
-    }
-
     if (cellCenters.length == 1) {
       final c = cellCenters[0];
       final startX = c.dx - direction.dx * cellSize * 0.28;
       final startY = c.dy - direction.dy * cellSize * 0.28;
-      final pathStart = Offset(startX, startY);
       final path = Path()..moveTo(startX, startY)..lineTo(c.dx, c.dy);
 
-      final shader = gradientShaderFor(pathStart, c);
-      final paint = Paint()
-        ..shader = shader
-        ..strokeWidth = bw
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-      final glowPaint = Paint()
-        ..shader = shader
-        ..strokeWidth = bw
-        ..maskFilter = MaskFilter.blur(
-            BlurStyle.normal, flash != null ? 24 : 12);
-
-      canvas.drawPath(path, glowPaint);
-      canvas.drawPath(path, paint);
+      _drawGradientPath(canvas, path, col, alpha * 0.6, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, alpha, bw, null);
       _drawHead(canvas, c.dx, c.dy, direction, hw, hl, col, alpha);
     } else {
       final r = cellSize * 0.38;
@@ -210,22 +175,63 @@ class BoardPainter extends CustomPainter {
       final last = cellCenters.last;
       path.lineTo(last.dx, last.dy);
 
-      final shader = gradientShaderFor(cellCenters.first, last);
+      _drawGradientPath(canvas, path, col, alpha * 0.6, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, alpha, bw, null);
+      _drawHead(canvas, last.dx, last.dy, direction, hw, hl, col, alpha);
+    }
+  }
+
+  /// Draws [path] with a subtle gradient that runs along its actual arc
+  /// length (tail dimmer, head brighter), instead of a straight-line
+  /// shader between the path's start/end points. A bounding-box gradient
+  /// looks fine on a single straight segment, but on a bent/curved arrow
+  /// its axis cuts across the bend diagonally, so most of the visible
+  /// color change bunches up around the curve while the straight legs
+  /// stay nearly flat. Sampling by length keeps the transition even
+  /// everywhere the stroke actually travels.
+  void _drawGradientPath(Canvas canvas, Path path, Color col, double alpha,
+      double strokeWidth, double? blurSigma) {
+    final metrics = path.computeMetrics().toList();
+    final totalLength = metrics.fold<double>(0.0, (sum, m) => sum + m.length);
+
+    Paint paintFor(Color color) {
       final paint = Paint()
-        ..shader = shader
-        ..strokeWidth = bw
+        ..color = color
+        ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
-      final glowPaint = Paint()
-        ..shader = shader
-        ..strokeWidth = bw
-        ..maskFilter = MaskFilter.blur(
-            BlurStyle.normal, flash != null ? 24 : 12);
+      if (blurSigma != null) {
+        paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma);
+      }
+      return paint;
+    }
 
-      canvas.drawPath(path, glowPaint);
-      canvas.drawPath(path, paint);
-      _drawHead(canvas, last.dx, last.dy, direction, hw, hl, col, alpha);
+    if (totalLength <= 0) {
+      canvas.drawPath(path, paintFor(col.withAlpha((alpha * 255).toInt())));
+      return;
+    }
+
+    final tailColor = col.withAlpha((alpha * 0.55 * 255).toInt());
+    final headColor = col.withAlpha((alpha * 255).toInt());
+
+    const resolution = 28;
+    double traveled = 0;
+    for (final metric in metrics) {
+      final segLen = metric.length;
+      if (segLen <= 0) continue;
+
+      final steps = max(1, (resolution * segLen / totalLength).round());
+      final stepLen = segLen / steps;
+      for (int i = 0; i < steps; i++) {
+        final from = i * stepLen;
+        final to = min(segLen, from + stepLen);
+        final sub = metric.extractPath(from, to);
+        final frac = (traveled + (from + to) / 2) / totalLength;
+        final color = Color.lerp(tailColor, headColor, frac)!;
+        canvas.drawPath(sub, paintFor(color));
+      }
+      traveled += segLen;
     }
   }
 
