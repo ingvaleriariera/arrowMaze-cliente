@@ -76,22 +76,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
     gameNotifier.loadLevel(widget.levelId, 'user_123');
   }
 
-  /// Distance in cell-units from [arrow]'s head to the board's exit (the
-  /// border or a void cell) along its direction. Mirrors the activatable
-  /// check in board_builder.dart / the HTML reference's edgeDist loop.
-  int _edgeDistance(Arrow arrow, BoardShape shape) {
-    var pos = arrow.getHead().position;
-    final dir = arrow.getDirection();
-    var distance = 0;
-    while (true) {
-      final next = pos.translate(dir);
-      distance++;
-      if (!shape.contains(next)) break;
-      pos = next;
-    }
-    return distance;
-  }
-
   void _startExitAnimation(Arrow arrow, BoardShape shape) {
     final controller = AnimationController(
       duration: const Duration(milliseconds: 500),
@@ -101,7 +85,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       cells: arrow.segments.map((s) => s.position).toList(),
       direction: arrow.getDirection(),
       color: arrow.color.value,
-      edgeDistance: _edgeDistance(arrow, shape),
+      edgeDistance: shape.distanceToExit(arrow.getHead().position, arrow.getDirection()),
       controller: controller,
     );
     _pendingExits[arrow.id] = exit;

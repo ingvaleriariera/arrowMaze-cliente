@@ -50,6 +50,21 @@ class BoardShape {
     return !contains(next);
   }
 
+  /// Distance in cell-units from [from] to the board's exit (the border or
+  /// a void cell) along [direction]. Used both to check activatability
+  /// (board_builder.dart) and to size the exit animation (GameScreen).
+  int distanceToExit(Position from, Direction direction) {
+    var pos = from;
+    var distance = 0;
+    while (true) {
+      final next = pos.translate(direction);
+      distance++;
+      if (!contains(next)) break;
+      pos = next;
+    }
+    return distance;
+  }
+
   List<Position> getCells() => validCells
       .map((key) {
         final parts = key.split(',');
