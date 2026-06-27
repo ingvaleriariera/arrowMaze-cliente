@@ -35,22 +35,13 @@ class LoadLevelUseCase {
     debugPrint('   Position.toKey() format:');
     validCells.take(5).forEach((pos) => debugPrint('  pos: "${pos.toKey()}"'));
 
-    // Generate arrows automatically based on difficulty
-    final difficultyMap = {
-      'EASY': 1,
-      'MEDIUM': 2,
-      'HARD': 3,
-    };
-    final difficultyInt =
-        difficultyMap[level.difficulty.toUpperCase()] ?? 1;
-
     // Deterministic seed from levelId so every player sees the same arrow
     // layout for a given level (keeps leaderboard scores comparable).
     final builder = BoardBuilder.create(seed: level.id.hashCode)
         .setShape(shape)
-        .setDifficulty(difficultyInt, difficultyStr: level.difficulty);
+        .setDifficulty(level.difficulty);
 
-    debugPrint('   Generating arrows with difficulty=${level.difficulty} (int: $difficultyInt)...');
+    debugPrint('   Generating arrows with difficulty=${level.difficulty}...');
 
     final board = builder.build();
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');

@@ -11,7 +11,6 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 
 class BoardBuilder {
   late BoardShape _shape;
-  late int _difficulty;
   late String _difficultyStr;
   late Random _random;
   final Map<String, Arrow> _arrows = {};
@@ -29,11 +28,10 @@ class BoardBuilder {
     return this;
   }
 
-  BoardBuilder setDifficulty(int difficulty, {String? difficultyStr}) {
-    _difficulty = difficulty;
-    if (difficultyStr != null) {
-      _difficultyStr = difficultyStr;
-    }
+  /// Only the maxMoves margin still depends on difficulty — arrow length
+  /// and density are now driven purely by board size (see _generateArrows).
+  BoardBuilder setDifficulty(String difficultyStr) {
+    _difficultyStr = difficultyStr.toUpperCase();
     return this;
   }
 
@@ -132,7 +130,11 @@ class BoardBuilder {
     int arrowIndex = 0;
     int totalIterations = 0;
 
-    final maxLen = _difficulty == 3 ? 7 : _difficulty == 2 ? 5 : 4;
+    // Boards this big (>=7 on either side, per the now-much-larger
+    // backend boardLayouts) can fit the long 8-15 segment arrows from the
+    // SayGames-style density target; smaller boards fold that bucket's
+    // share into "medium" instead, since a 15-segment arrow can't fit.
+    final allowLong = _boardSpansAtLeast(7);
 
     while (remaining.isNotEmpty) {
       totalIterations++;
@@ -140,7 +142,7 @@ class BoardBuilder {
         return false;
       }
 
-      final arrowData = _findActivatableArrow(remaining, grid, maxLen);
+      final arrowData = _findActivatableArrow(remaining, grid, allowLong);
       if (arrowData == null) {
         failStreak++;
         continue;
@@ -178,8 +180,42 @@ class BoardBuilder {
     return true;
   }
 
+  /// True if the shape's bounding box spans at least [n] cells in either
+  /// dimension. Cheap to recompute per generation attempt since shapes
+  /// rarely exceed a few dozen cells.
+  bool _boardSpansAtLeast(int n) {
+    final cells = _shape.getCells();
+    if (cells.isEmpty) return false;
+    var minX = cells.first.x, maxX = cells.first.x;
+    var minY = cells.first.y, maxY = cells.first.y;
+    for (final c in cells) {
+      if (c.x < minX) minX = c.x;
+      if (c.x > maxX) maxX = c.x;
+      if (c.y < minY) minY = c.y;
+      if (c.y > maxY) maxY = c.y;
+    }
+    return (maxX - minX + 1) >= n || (maxY - minY + 1) >= n;
+  }
+
+  /// Weighted arrow-length pick targeting a denser, more varied board:
+  /// 30% long (8-15), 30% medium (4-7), 30% short (2-3), 10% single-cell.
+  /// On boards too small to fit a long arrow, that 30% share folds into
+  /// "medium" instead.
+  int _pickArrowLength(bool allowLong) {
+    final r = _random.nextDouble();
+    if (allowLong) {
+      if (r < 0.30) return 8 + _random.nextInt(8); // 8-15
+      if (r < 0.60) return 4 + _random.nextInt(4); // 4-7
+      if (r < 0.90) return 2 + _random.nextInt(2); // 2-3
+      return 1;
+    }
+    if (r < 0.60) return 4 + _random.nextInt(4); // 4-7 (absorbs long's share)
+    if (r < 0.90) return 2 + _random.nextInt(2); // 2-3
+    return 1;
+  }
+
   Map<String, dynamic>? _findActivatableArrow(
-      Set<String> remaining, Map<String, String> grid, int maxLen) {
+      Set<String> remaining, Map<String, String> grid, bool allowLong) {
     for (int attempt = 0; attempt < 300; attempt++) {
       // Random starting cell
       final cells = remaining.toList();
@@ -188,7 +224,7 @@ class BoardBuilder {
       final startKey = cells[_random.nextInt(cells.length)];
       final startPos = _positionFromKey(startKey);
 
-      final len = 1 + _random.nextInt(maxLen);
+      final len = _pickArrowLength(allowLong);
       final path = _growPath(startPos, len, remaining);
 
       if (path.isEmpty) continue;
