@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
@@ -132,28 +133,51 @@ class BoardPainter extends CustomPainter {
             ? const Color(0xFFFF3366)
             : color;
 
-    final bw = cellSize * 0.17;
-    final hw = cellSize * 0.48;
-    final hl = cellSize * 0.38;
+    // Thin stroke with a head sized proportionally to it (SayGames-style
+    // slender arrows), instead of the old thick fixed-ratio body/head.
+    final bw = cellSize * 0.09;
+    final hw = bw * 3.2;
+    final hl = bw * 4.2;
 
-    final paint = Paint()
-      ..color = col.withAlpha((alpha * 255).toInt())
-      ..strokeWidth = bw
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-
-    final glowPaint = Paint()
-      ..color = col.withAlpha((alpha * 0.6 * 255).toInt())
-      ..strokeWidth = bw
-      ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal, flash != null ? 24 : 12);
+    // Subtle linear gradient running along the whole body (not just at
+    // curve joints), from a dimmer tail to a brighter head. The gradient's
+    // endpoints are the actual start/end of the drawn path, computed per
+    // branch below since the single-cell case draws a short stub rather
+    // than spanning between cell centers.
+    Shader gradientShaderFor(Offset start, Offset end) {
+      if (start == end) {
+        return ui.Gradient.linear(start, end + const Offset(0.01, 0.01),
+            [col.withAlpha((alpha * 255).toInt()), col.withAlpha((alpha * 255).toInt())]);
+      }
+      return ui.Gradient.linear(
+        start,
+        end,
+        [
+          col.withAlpha((alpha * 0.55 * 255).toInt()),
+          col.withAlpha((alpha * 255).toInt()),
+        ],
+      );
+    }
 
     if (cellCenters.length == 1) {
       final c = cellCenters[0];
       final startX = c.dx - direction.dx * cellSize * 0.28;
       final startY = c.dy - direction.dy * cellSize * 0.28;
+      final pathStart = Offset(startX, startY);
       final path = Path()..moveTo(startX, startY)..lineTo(c.dx, c.dy);
+
+      final shader = gradientShaderFor(pathStart, c);
+      final paint = Paint()
+        ..shader = shader
+        ..strokeWidth = bw
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+      final glowPaint = Paint()
+        ..shader = shader
+        ..strokeWidth = bw
+        ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal, flash != null ? 24 : 12);
 
       canvas.drawPath(path, glowPaint);
       canvas.drawPath(path, paint);
@@ -185,6 +209,19 @@ class BoardPainter extends CustomPainter {
 
       final last = cellCenters.last;
       path.lineTo(last.dx, last.dy);
+
+      final shader = gradientShaderFor(cellCenters.first, last);
+      final paint = Paint()
+        ..shader = shader
+        ..strokeWidth = bw
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+      final glowPaint = Paint()
+        ..shader = shader
+        ..strokeWidth = bw
+        ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal, flash != null ? 24 : 12);
 
       canvas.drawPath(path, glowPaint);
       canvas.drawPath(path, paint);
