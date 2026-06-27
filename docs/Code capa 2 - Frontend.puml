@@ -1,0 +1,309 @@
+@startuml client_layer2_application
+title Arrow Maze Cliente — Capa 2: Application (Use Cases)
+
+skinparam backgroundColor #FFFFFF
+skinparam class {
+  BackgroundColor #E8EAF6
+  BorderColor #3949AB
+  HeaderBackgroundColor #3F51B5
+  HeaderFontColor #FFFFFF
+  FontColor #000000
+  ArrowColor #333333
+}
+skinparam interface {
+  BackgroundColor #EDE7F6
+  BorderColor #6A1B9A
+  HeaderBackgroundColor #7B1FA2
+  HeaderFontColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+}
+
+note as N1
+  Clases de Capa 1 referenciadas aquí
+  (GameSession, Level, GameProgress, PowerUp,
+  MoveResult, PowerUpResult, BoardBuilder,
+  ILevelRepository, IGameProgressRepository)
+  no se redibujan. Las flechas apuntan
+  hacia ellas como dependencias de C1.
+end note
+
+' ─────────────────────────────────────────
+' CASOS DE USO — JUEGO
+' ─────────────────────────────────────────
+
+class LoadLevelUseCase {
+  - levelRepository: ILevelRepository
+  - boardBuilder: BoardBuilder
+  --
+  + execute(levelId: String): GameSession
+}
+
+note right of LoadLevelUseCase
+  1. Llama levelRepository.getLevel()
+  2. Parsea boardLayout con BoardShape.fromJson()
+  3. Construye el Board con BoardBuilder
+  4. Crea y retorna una GameSession nueva
+end note
+
+class ActivateArrowUseCase {
+  - audioService: IAudioService
+  --
+  + execute(session: GameSession, arrowId: String): MoveResult
+}
+
+note right of ActivateArrowUseCase
+  Llama session.executeMove(arrowId).
+  Si exitoso → reproduce efecto de sonido.
+  El GameNotifier (C3) actualiza su estado
+  con el MoveResult recibido.
+end note
+
+class PauseLevelUseCase {
+  --
+  + execute(session: GameSession): void
+}
+
+class ResumeLevelUseCase {
+  --
+  + execute(session: GameSession): void
+}
+
+class RestartLevelUseCase {
+  - loadLevelUseCase: LoadLevelUseCase
+  --
+  + execute(levelId: String): GameSession
+}
+
+class GetLevelSummariesUseCase {
+  - levelRepository: ILevelRepository
+  - progressRepository: IGameProgressRepository
+  --
+  + execute(userId: String): List<LevelSummaryDTO>
+}
+
+note right of GetLevelSummariesUseCase
+  Combina la lista de niveles del backend
+  con el progreso local del jugador para
+  construir la pantalla de selección
+  (completado, bloqueado, mejor puntaje).
+end note
+
+' ─────────────────────────────────────────
+' CASO DE USO — POWER-UPS
+' ─────────────────────────────────────────
+
+class UsePowerUpUseCase {
+  - progressRepository: IGameProgressRepository
+  - audioService: IAudioService
+  --
+  + execute(session: GameSession, powerUp: PowerUp, progress: GameProgress): PowerUpResult
+}
+
+note right of UsePowerUpUseCase
+  1. Verifica coins: progress.spendCoins(powerUp.getCost())
+  2. Si no alcanza → retorna PowerUpResult.failure()
+  3. Aplica: session.applyPowerUp(powerUp)
+  4. Persiste progreso actualizado
+  5. Reproduce efecto de sonido
+  El tipo concreto de PowerUp (Hint/Hammer/Magnet)
+  lo instancia el GameNotifier (Capa 3).
+  Agregar un nuevo power-up no cambia este UC.
+end note
+
+' ─────────────────────────────────────────
+' CASOS DE USO — AUTENTICACIÓN
+' ─────────────────────────────────────────
+
+class LoginUseCase {
+  - authRepository: IAuthRepository
+  --
+  + execute(input: LoginInputDTO): AuthResultDTO
+}
+
+class RegisterUseCase {
+  - authRepository: IAuthRepository
+  --
+  + execute(input: RegisterInputDTO): AuthResultDTO
+}
+
+class LogoutUseCase {
+  - authRepository: IAuthRepository
+  --
+  + execute(): void
+}
+
+' ─────────────────────────────────────────
+' CASOS DE USO — PROGRESO
+' ─────────────────────────────────────────
+
+class SaveProgressUseCase {
+  - progressRepository: IGameProgressRepository
+  --
+  + execute(progress: GameProgress): void
+}
+
+class GetLocalProgressUseCase {
+  - progressRepository: IGameProgressRepository
+  --
+  + execute(userId: String): GameProgress?
+}
+
+class SyncProgressUseCase {
+  - progressRepository: IGameProgressRepository
+  --
+  + execute(userId: String): GameProgress
+}
+
+note right of SyncProgressUseCase
+  Llama progressRepository.sync(userId).
+  IGameProgressRepository (C1) abstrae si
+  la sincronización es local o remota.
+  La implementación en C3 decide cómo
+  resolver conflictos local vs backend.
+end note
+
+class GetLeaderboardUseCase {
+  - leaderboardRepository: ILeaderboardRepository
+  --
+  + execute(levelId: String, limit: int): List<LeaderboardEntryDTO>
+}
+
+' ─────────────────────────────────────────
+' PORTS PROPIOS DE CAPA 2
+' ─────────────────────────────────────────
+
+interface IAuthRepository {
+  + login(email: String, password: String): AuthResultDTO
+  + register(email: String, username: String, password: String): AuthResultDTO
+  + logout(): void
+  + getToken(): String?
+  + isAuthenticated(): bool
+}
+
+note right of IAuthRepository
+  En C3: persiste el token con
+  flutter_secure_storage.
+  En C3: implementa las llamadas HTTP
+  al endpoint de auth del backend.
+  Auth no es dominio del juego en el
+  cliente → no va en C1.
+end note
+
+interface ILeaderboardRepository {
+  + getTopScores(levelId: String, limit: int): List<LeaderboardEntryDTO>
+}
+
+note right of ILeaderboardRepository
+  El leaderboard es solo dato de display
+  en el cliente (no hay agregado Leaderboard
+  en el dominio del juego).
+  Implementado en C3 con llamada HTTP
+  al backend. Por eso va en C2 y no C1.
+end note
+
+interface IAudioService {
+  + playEffect(sound: String): void
+  + playMusic(track: String): void
+  + stopMusic(): void
+  + mute(): void
+  + unmute(): void
+  + isMuted(): bool
+}
+
+' ─────────────────────────────────────────
+' DTOs
+' ─────────────────────────────────────────
+
+class LoginInputDTO <<DTO>> {
+  + email: String
+  + password: String
+}
+
+class RegisterInputDTO <<DTO>> {
+  + email: String
+  + username: String
+  + password: String
+}
+
+class AuthResultDTO <<DTO>> {
+  + token: String
+  + userId: String
+}
+
+class LeaderboardEntryDTO <<DTO>> {
+  + rank: int
+  + username: String
+  + score: int
+  + levelId: String
+}
+
+class LevelSummaryDTO <<DTO>> {
+  + levelId: String
+  + difficulty: String
+  + completed: bool
+  + bestScore: int
+  + isTimed: bool
+}
+
+' ─────────────────────────────────────────
+' RELACIONES
+' ─────────────────────────────────────────
+
+' LoadLevelUseCase
+LoadLevelUseCase --> ILevelRepository  : uses (C1)
+LoadLevelUseCase --> BoardBuilder      : uses (C1)
+LoadLevelUseCase ..> GameSession       : <<creates>>
+
+' ActivateArrowUseCase
+ActivateArrowUseCase --> GameSession   : uses (C1)
+ActivateArrowUseCase --> IAudioService : uses (C2)
+ActivateArrowUseCase ..> MoveResult    : <<returns>>
+
+' PauseLevelUseCase / ResumeLevelUseCase
+PauseLevelUseCase  --> GameSession : uses (C1)
+ResumeLevelUseCase --> GameSession : uses (C1)
+
+' RestartLevelUseCase
+RestartLevelUseCase --> LoadLevelUseCase : delegates
+RestartLevelUseCase ..> GameSession      : <<creates>>
+
+' GetLevelSummariesUseCase
+GetLevelSummariesUseCase --> ILevelRepository          : uses (C1)
+GetLevelSummariesUseCase --> IGameProgressRepository   : uses (C1)
+GetLevelSummariesUseCase ..> LevelSummaryDTO           : <<returns>>
+
+' UsePowerUpUseCase
+UsePowerUpUseCase --> IGameProgressRepository : uses (C1)
+UsePowerUpUseCase --> IAudioService           : uses (C2)
+UsePowerUpUseCase --> GameSession             : uses (C1)
+UsePowerUpUseCase --> GameProgress            : uses (C1)
+UsePowerUpUseCase --> PowerUp                 : uses (C1)
+UsePowerUpUseCase ..> PowerUpResult           : <<returns>>
+
+' Auth
+LoginUseCase    --> IAuthRepository  : uses
+RegisterUseCase --> IAuthRepository  : uses
+LogoutUseCase   --> IAuthRepository  : uses
+LoginUseCase    --> LoginInputDTO    : uses
+RegisterUseCase --> RegisterInputDTO : uses
+LoginUseCase    ..> AuthResultDTO    : <<returns>>
+RegisterUseCase ..> AuthResultDTO    : <<returns>>
+
+' Progreso
+SaveProgressUseCase     --> IGameProgressRepository : uses (C1)
+SaveProgressUseCase     --> GameProgress            : uses (C1)
+GetLocalProgressUseCase --> IGameProgressRepository : uses (C1)
+SyncProgressUseCase     --> IGameProgressRepository : uses (C1)
+
+' Leaderboard
+GetLeaderboardUseCase --> ILeaderboardRepository : uses
+GetLeaderboardUseCase ..> LeaderboardEntryDTO    : <<returns>>
+
+' DTOs relacionados a ports
+IAuthRepository        ..> AuthResultDTO        : <<returns>>
+ILeaderboardRepository ..> LeaderboardEntryDTO  : <<returns>>
+
+@enduml
