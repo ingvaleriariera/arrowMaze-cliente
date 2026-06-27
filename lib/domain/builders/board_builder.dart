@@ -84,6 +84,7 @@ class BoardBuilder {
       if (!generated) continue;
 
       // Build board and graph to check if it's a valid puzzle
+      _fillUncoveredCells();
       final board = _buildWithExistingArrows();
       final activatable = board.graph.getActivatable();
       final totalArrows = _arrows.length;
@@ -110,6 +111,7 @@ class BoardBuilder {
 
     // Fallback: use the last generated board even if not ideal
     debugPrint('⚠️  Max attempts reached, using last generated board');
+    _fillUncoveredCells();
     final board = _buildWithExistingArrows();
     final totalArrows = _arrows.length;
     final margin = _difficultyStr == 'HARD'
@@ -180,6 +182,56 @@ class BoardBuilder {
     return true;
   }
 
+  /// Guarantees every valid cell ends up covered by some arrow. A failed
+  /// or abandoned generation attempt (failStreak/iteration cap hit, or the
+  /// 60-attempt fallback) can leave a few cells unclaimed because no
+  /// activatable path could be grown from them in time; rather than ship
+  /// a board with dead, arrow-less cells, fill any leftovers here with
+  /// small 1-2 segment arrows grown only through other leftover cells.
+  void _fillUncoveredCells() {
+    final grid = <String, String>{};
+    for (final arrow in _arrows.values) {
+      for (final segment in arrow.segments) {
+        grid[segment.position.toKey()] = arrow.id;
+      }
+    }
+
+    final missing = Set<String>.from(_shape.validCells)..removeAll(grid.keys);
+    if (missing.isEmpty) return;
+
+    debugPrint('🩹 Filling ${missing.length} uncovered cell(s) with small arrows');
+
+    while (missing.isNotEmpty) {
+      final startPos = _positionFromKey(missing.first);
+      final path = _growPath(startPos, 2, missing);
+      final ownCells = path.map((p) => p.toKey()).toSet();
+      final directions = _getVectorsForPath(path);
+
+      var chosen = directions.first;
+      for (final vec in directions) {
+        if (_isActivatable(path.last, vec, grid, ownCells: ownCells)) {
+          chosen = vec;
+          break;
+        }
+      }
+
+      final arrowId = 'arrow_${_arrows.length}';
+      final segments = _createArrowSegments(path, chosen);
+      _arrows[arrowId] = Arrow(
+        id: arrowId,
+        segments: segments,
+        color: _getColorForIndex(_arrows.length),
+      );
+
+      for (final segment in segments) {
+        grid[segment.position.toKey()] = arrowId;
+      }
+      for (final pos in path) {
+        missing.remove(pos.toKey());
+      }
+    }
+  }
+
   /// True if the shape's bounding box spans at least [n] cells in either
   /// dimension. Cheap to recompute per generation attempt since shapes
   /// rarely exceed a few dozen cells.
@@ -231,9 +283,14 @@ class BoardBuilder {
 
       final head = path.last;
       final directions = _getVectorsForPath(path);
+      final ownCells = path.map((p) => p.toKey()).toSet();
 
       for (final vec in directions) {
-        final activatable = _isActivatable(head, vec, grid);
+        // Pass the path's own (not-yet-registered) cells too: a snake
+        // whose path curls back on its own direction of travel must never
+        // be approved with an exit vector that immediately re-enters its
+        // own body — that arrow would be permanently unsolvable.
+        final activatable = _isActivatable(head, vec, grid, ownCells: ownCells);
         if (activatable) {
           return {
             'cells': path,
@@ -306,7 +363,8 @@ class BoardBuilder {
   }
 
   bool _isActivatable(
-      Position head, Direction vec, Map<String, String> grid) {
+      Position head, Direction vec, Map<String, String> grid,
+      {Set<String>? ownCells}) {
     var cx = head.x + vec.dx;
     var cy = head.y + vec.dy;
 
@@ -318,8 +376,9 @@ class BoardBuilder {
         return true;
       }
 
-      // Check if blocked by another arrow
-      if (grid['${pos.toKey()}'] != null) {
+      // Check if blocked by another arrow, or by one of this arrow's own
+      // not-yet-registered cells (see _findActivatableArrow).
+      if (grid['${pos.toKey()}'] != null || (ownCells?.contains(pos.toKey()) ?? false)) {
         return false;
       }
 
