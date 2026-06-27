@@ -1,11 +1,16 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/game_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
+import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
+import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 
@@ -18,9 +23,30 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen> {
+/// An exit animation in flight, driven by its own [controller]. The cells,
+/// direction and color are snapshotted from the arrow at the moment it
+/// left the board, since by then it's already gone from `board.arrows`.
+class _PendingExit {
+  final List<Position> cells;
+  final Direction direction;
+  final String color;
+  final int edgeDistance;
+  final AnimationController controller;
+
+  _PendingExit({
+    required this.cells,
+    required this.direction,
+    required this.color,
+    required this.edgeDistance,
+    required this.controller,
+  });
+}
+
+class _GameScreenState extends ConsumerState<GameScreen>
+    with TickerProviderStateMixin {
   bool _showPause = false;
   bool _loadInitiated = false;
+  final Map<String, _PendingExit> _pendingExits = {};
 
   @override
   void initState() {
@@ -36,11 +62,74 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    for (final exit in _pendingExits.values) {
+      exit.controller.dispose();
+    }
+    super.dispose();
+  }
 
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
     gameNotifier.loadLevel(widget.levelId, 'user_123');
+  }
+
+  /// Distance in cell-units from [arrow]'s head to the board's exit (the
+  /// border or a void cell) along its direction. Mirrors the activatable
+  /// check in board_builder.dart / the HTML reference's edgeDist loop.
+  int _edgeDistance(Arrow arrow, BoardShape shape) {
+    var pos = arrow.getHead().position;
+    final dir = arrow.getDirection();
+    var distance = 0;
+    while (true) {
+      final next = pos.translate(dir);
+      distance++;
+      if (!shape.contains(next)) break;
+      pos = next;
+    }
+    return distance;
+  }
+
+  void _startExitAnimation(Arrow arrow, BoardShape shape) {
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    final exit = _PendingExit(
+      cells: arrow.segments.map((s) => s.position).toList(),
+      direction: arrow.getDirection(),
+      color: arrow.color.value,
+      edgeDistance: _edgeDistance(arrow, shape),
+      controller: controller,
+    );
+    _pendingExits[arrow.id] = exit;
+
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _pendingExits.remove(arrow.id));
+        controller.dispose();
+      }
+    });
+    controller.forward();
+  }
+
+  /// Eased (1-(1-t)^3) progress for every exit in flight, matching the
+  /// easeOut curve used by the HTML reference's worm-exit animation.
+  List<ExitingArrowAnim> _buildExitingAnimList() {
+    return _pendingExits.values.map((exit) {
+      final t = exit.controller.value;
+      final eased = 1 - pow(1 - t, 3).toDouble();
+      return ExitingArrowAnim(
+        cells: exit.cells,
+        direction: exit.direction,
+        color: exit.color,
+        edgeDistance: exit.edgeDistance,
+        progress: eased,
+      );
+    }).toList();
   }
 
   @override
@@ -156,6 +245,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                             final arrowId = board.grid['$gridX,$gridY'];
                             if (arrowId != null) {
                               debugPrint('🎯 Arrow tapped: $arrowId');
+                              if (activatableSet.contains(arrowId)) {
+                                final arrow = board.arrows[arrowId];
+                                if (arrow != null) {
+                                  _startExitAnimation(arrow, shape);
+                                }
+                              }
                               gameNotifier.activateArrow(arrowId);
                             }
                           },
@@ -167,6 +262,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                               minX: minX,
                               minY: minY,
                               flashMap: gameState.flashMap,
+                              exitingArrows: _buildExitingAnimList(),
                             ),
                             size: Size(gridWidth, gridHeight),
                           ),

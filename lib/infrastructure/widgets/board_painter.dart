@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
+import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 
 enum FlashType { ok, fail }
 
@@ -13,7 +14,7 @@ class BoardPainter extends CustomPainter {
   final double cellSize;
   final int minX;
   final int minY;
-  final List<ExitingArrowAnimation>? exitingArrows;
+  final List<ExitingArrowAnim>? exitingArrows;
 
   BoardPainter({
     required this.board,
@@ -57,21 +58,74 @@ class BoardPainter extends CustomPainter {
       _drawArrow(canvas, arrow, color, alpha, flashType);
     }
 
-    // 4. Draw exiting arrows with animation
+    // 4. Draw exiting arrows sliding off the board along their exit
+    // direction, the whole snake moving together (head leaves first, tail
+    // follows the same path), matching the worm-exit animation from the
+    // HTML reference (docs/arrow_maze_v5.html).
     if (exitingArrows != null) {
       for (final exiting in exitingArrows!) {
         final color = Color(
           int.parse(exiting.color.replaceFirst('#', ''), radix: 16) |
               0xFF000000,
         );
-        _drawArrow(canvas, exiting.arrow, color, exiting.alpha,
-            FlashType.ok);
+
+        final n = exiting.cells.length;
+        final totalDistance = exiting.edgeDistance + n;
+        final headTravel = exiting.progress * totalDistance;
+
+        final cellCenters = List<Offset>.generate(n, (i) {
+          final pos = _posOnPath(exiting.cells, exiting.direction, i + headTravel);
+          final x = pos.dx - minX;
+          final y = pos.dy - minY;
+          return Offset(
+              x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
+        });
+
+        _drawArrowAtOffsets(canvas, cellCenters, exiting.direction, color, 1.0, null);
       }
     }
   }
 
+  /// Interpolated position along [cells] extended past its last cell in
+  /// [direction], at fractional distance [s] measured in cell-units from
+  /// the start of the path. Mirrors getPosOnPath() in the HTML reference.
+  Offset _posOnPath(List<Position> cells, Direction direction, double s) {
+    final n = cells.length;
+    if (s <= 0) {
+      return Offset(cells[0].x.toDouble(), cells[0].y.toDouble());
+    }
+    if (s >= n - 1) {
+      final last = cells[n - 1];
+      final overshoot = s - (n - 1);
+      return Offset(
+        last.x + direction.dx * overshoot,
+        last.y + direction.dy * overshoot,
+      );
+    }
+    final i = s.floor();
+    final f = s - i;
+    final a = cells[i];
+    final b = cells[i + 1];
+    return Offset(
+      a.x + (b.x - a.x) * f,
+      a.y + (b.y - a.y) * f,
+    );
+  }
+
   void _drawArrow(Canvas canvas, Arrow arrow, Color color, double alpha,
       FlashType? flash) {
+    final cellCenters = arrow.segments.map((segment) {
+      final x = segment.position.x - minX;
+      final y = segment.position.y - minY;
+      return Offset(x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
+    }).toList();
+
+    _drawArrowAtOffsets(canvas, cellCenters, arrow.getDirection(), color,
+        alpha, flash);
+  }
+
+  void _drawArrowAtOffsets(Canvas canvas, List<Offset> cellCenters,
+      Direction direction, Color color, double alpha, FlashType? flash) {
     final col = flash == FlashType.ok
         ? const Color(0xFF00F5A0)
         : flash == FlashType.fail
@@ -94,14 +148,6 @@ class BoardPainter extends CustomPainter {
       ..strokeWidth = bw
       ..maskFilter = MaskFilter.blur(
           BlurStyle.normal, flash != null ? 24 : 12);
-
-    final cellCenters = arrow.segments.map((segment) {
-      final x = segment.position.x - minX;
-      final y = segment.position.y - minY;
-      return Offset(x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
-    }).toList();
-
-    final direction = arrow.getDirection();
 
     if (cellCenters.length == 1) {
       final c = cellCenters[0];
@@ -178,14 +224,21 @@ class BoardPainter extends CustomPainter {
   }
 }
 
-class ExitingArrowAnimation {
-  final Arrow arrow;
+/// A snapshot of an arrow that just exited, plus enough geometry to slide
+/// it off the board over the animation's lifetime. [progress] is the
+/// eased (0..1) fraction of the animation already elapsed.
+class ExitingArrowAnim {
+  final List<Position> cells;
+  final Direction direction;
   final String color;
-  final double alpha;
+  final int edgeDistance;
+  final double progress;
 
-  ExitingArrowAnimation({
-    required this.arrow,
+  ExitingArrowAnim({
+    required this.cells,
+    required this.direction,
     required this.color,
-    required this.alpha,
+    required this.edgeDistance,
+    required this.progress,
   });
 }
