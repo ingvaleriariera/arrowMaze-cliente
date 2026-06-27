@@ -34,7 +34,14 @@ class AppRouter {
         path: '/game/:levelId',
         builder: (context, state) {
           final levelId = state.pathParameters['levelId']!;
-          return GameScreen(levelId: levelId);
+          final extra = state.extra;
+          final difficulty = extra is Map ? extra['difficulty'] as String? : null;
+          final levelNumber = extra is Map ? extra['levelNumber'] as int? : null;
+          return GameScreen(
+            levelId: levelId,
+            difficulty: difficulty,
+            levelNumber: levelNumber,
+          );
         },
       ),
       GoRoute(

@@ -116,7 +116,13 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
             // GameScreen.initState triggers the actual load for this levelId,
             // so just navigate here to avoid a duplicate loadLevel() call.
             debugPrint('   → Navigating to /game/${level.levelId}');
-            context.go('/game/${level.levelId}');
+            context.go(
+              '/game/${level.levelId}',
+              extra: {
+                'difficulty': level.difficulty,
+                'levelNumber': index + 1,
+              },
+            );
           },
           child: Container(
             decoration: BoxDecoration(

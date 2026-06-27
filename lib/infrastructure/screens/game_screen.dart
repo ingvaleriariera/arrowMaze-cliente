@@ -16,8 +16,15 @@ import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dar
 
 class GameScreen extends ConsumerStatefulWidget {
   final String levelId;
+  final String? difficulty;
+  final int? levelNumber;
 
-  const GameScreen({required this.levelId, Key? key}) : super(key: key);
+  const GameScreen({
+    required this.levelId,
+    this.difficulty,
+    this.levelNumber,
+    Key? key,
+  }) : super(key: key);
 
   @override
   ConsumerState<GameScreen> createState() => _GameScreenState();
@@ -47,6 +54,23 @@ class _GameScreenState extends ConsumerState<GameScreen>
   bool _showPause = false;
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
+
+  // Music/vibration are presentation-only toggles for now — no backing
+  // service exists yet (sound reuses the already-wired SettingsNotifier).
+  bool _musicEnabled = true;
+  bool _vibrationEnabled = true;
+
+  int get _levelNumber {
+    if (widget.levelNumber != null) return widget.levelNumber!;
+    final match = RegExp(r'(\d+)$').firstMatch(widget.levelId);
+    return match != null ? int.parse(match.group(1)!) : 0;
+  }
+
+  String _difficultyLabel(AppLocalizations l10n) {
+    final raw = widget.difficulty?.toLowerCase();
+    if (raw == null) return '';
+    return l10n.translate(raw);
+  }
 
   @override
   void initState() {
@@ -144,9 +168,24 @@ class _GameScreenState extends ConsumerState<GameScreen>
       }
     });
 
+    final difficultyLabel = _difficultyLabel(l10n);
+    final hudTitle = difficultyLabel.isEmpty
+        ? '${l10n.translate('level')} $_levelNumber'
+        : '${l10n.translate('level')} $_levelNumber · $difficultyLabel';
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('${l10n.translate('moves')}: ${gameState.session?.moves ?? 0}/${gameState.session?.maxMoves ?? 0}'),
+        centerTitle: true,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(hudTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              '${l10n.translate('moves')}: ${gameState.session?.moves ?? 0}/${gameState.session?.maxMoves ?? 0}',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.pause),
@@ -294,48 +333,81 @@ class _GameScreenState extends ConsumerState<GameScreen>
           ],
         ),
         // Pause overlay
-        if (_showPause)
-          Scaffold(
-            backgroundColor: Colors.black54,
-            body: Center(
-              child: Card(
-                color: const Color(0xFF1a1a2e),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Paused',
-                        style: TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: () {
-                          gameNotifier.resume();
-                          setState(() => _showPause = false);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00F5A0),
-                          foregroundColor: Colors.black,
-                        ),
-                        child: const Text('Resume'),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => context.go('/levels'),
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey),
-                        child: const Text('Exit'),
-                      ),
-                    ],
-                  ),
+        if (_showPause) _buildPauseOverlay(gameNotifier),
+      ],
+    );
+  }
+
+  Widget _buildPauseOverlay(GameNotifier gameNotifier) {
+    final l10n = AppLocalizations.of(context);
+    final settingsState = ref.watch(settingsNotifierProvider);
+    final settingsNotifier = ref.read(settingsNotifierProvider.notifier);
+
+    return Scaffold(
+      backgroundColor: Colors.black54,
+      body: Center(
+        child: Card(
+          color: const Color(0xFF1a1a2e),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.translate('paused'),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-              ),
+                const SizedBox(height: 24),
+                SwitchListTile(
+                  secondary: const Icon(Icons.volume_up, color: Color(0xFF00F5A0)),
+                  title: Text(l10n.translate('sound')),
+                  value: !settingsState.isMuted,
+                  onChanged: (_) => settingsNotifier.toggleMute(),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.music_note, color: Color(0xFF00F5A0)),
+                  title: Text(l10n.translate('music')),
+                  value: _musicEnabled,
+                  onChanged: (value) => setState(() => _musicEnabled = value),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.vibration, color: Color(0xFF00F5A0)),
+                  title: Text(l10n.translate('vibration')),
+                  value: _vibrationEnabled,
+                  onChanged: (value) => setState(() => _vibrationEnabled = value),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    gameNotifier.resume();
+                    setState(() => _showPause = false);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00F5A0),
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text(l10n.translate('resume')),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => _showPause = false);
+                    gameNotifier.restart(widget.levelId, 'user_123');
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                  child: Text(l10n.translate('restart')),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => context.go('/levels'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                  child: Text(l10n.translate('backToMenu')),
+                ),
+              ],
             ),
           ),
-      ],
+        ),
+      ),
     );
   }
 }
