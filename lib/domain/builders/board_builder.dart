@@ -198,19 +198,19 @@ class BoardBuilder {
   }
 
   /// Weighted arrow-length pick targeting a denser, more varied board:
-  /// 30% long (8-15), 30% medium (4-7), 30% short (2-3), 10% single-cell.
-  /// On boards too small to fit a long arrow, that 30% share folds into
-  /// "medium" instead.
+  /// 20% long (8-15), 33% medium (4-7), 33% short (2-3), 14% single-cell.
+  /// On boards too small to fit a long arrow, that 20% share folds evenly
+  /// into the other three buckets instead.
   int _pickArrowLength(bool allowLong) {
     final r = _random.nextDouble();
     if (allowLong) {
-      if (r < 0.30) return 8 + _random.nextInt(8); // 8-15
-      if (r < 0.60) return 4 + _random.nextInt(4); // 4-7
-      if (r < 0.90) return 2 + _random.nextInt(2); // 2-3
+      if (r < 0.20) return 8 + _random.nextInt(8); // 8-15
+      if (r < 0.53) return 4 + _random.nextInt(4); // 4-7
+      if (r < 0.86) return 2 + _random.nextInt(2); // 2-3
       return 1;
     }
-    if (r < 0.60) return 4 + _random.nextInt(4); // 4-7 (absorbs long's share)
-    if (r < 0.90) return 2 + _random.nextInt(2); // 2-3
+    if (r < 0.40) return 4 + _random.nextInt(4); // 4-7 (absorbs long's share)
+    if (r < 0.80) return 2 + _random.nextInt(2); // 2-3
     return 1;
   }
 
