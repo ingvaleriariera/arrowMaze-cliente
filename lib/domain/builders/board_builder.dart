@@ -37,6 +37,19 @@ class BoardBuilder {
 
   int? getCalculatedMaxMoves() => _calculatedMaxMoves;
 
+  /// Move-limit margin over the arrow count, by difficulty. Exposed
+  /// statically so callers that reuse an already-generated [Board] (e.g.
+  /// from a preload cache) can recompute the same maxMoves without
+  /// re-running generation just to read [_calculatedMaxMoves].
+  static int calculateMaxMoves(int totalArrows, String difficultyStr) {
+    final margin = difficultyStr == 'HARD'
+        ? 0.15
+        : difficultyStr == 'MEDIUM'
+            ? 0.25
+            : 0.35;
+    return (totalArrows * (1 + margin)).ceil();
+  }
+
   BoardBuilder addArrow(Arrow arrow) {
     _arrows[arrow.id] = arrow;
     return this;
@@ -95,13 +108,7 @@ class BoardBuilder {
       // Valid puzzle = NOT all arrows are free AND have at least 4 arrows
       if (activatable.length < totalArrows && totalArrows > 3) {
         debugPrint('✅ Valid puzzle found!');
-        // Calculate maxMoves
-        final margin = _difficultyStr == 'HARD'
-            ? 0.15
-            : _difficultyStr == 'MEDIUM'
-                ? 0.25
-                : 0.35;
-        _calculatedMaxMoves = (totalArrows * (1 + margin)).ceil();
+        _calculatedMaxMoves = calculateMaxMoves(totalArrows, _difficultyStr);
         return board;
       }
 
@@ -113,13 +120,7 @@ class BoardBuilder {
     debugPrint('⚠️  Max attempts reached, using last generated board');
     _fillUncoveredCells();
     final board = _buildWithExistingArrows();
-    final totalArrows = _arrows.length;
-    final margin = _difficultyStr == 'HARD'
-        ? 0.15
-        : _difficultyStr == 'MEDIUM'
-            ? 0.25
-            : 0.35;
-    _calculatedMaxMoves = (totalArrows * (1 + margin)).ceil();
+    _calculatedMaxMoves = calculateMaxMoves(_arrows.length, _difficultyStr);
     return board;
   }
 

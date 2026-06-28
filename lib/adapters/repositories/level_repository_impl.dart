@@ -44,6 +44,11 @@ class LevelRepositoryImpl implements ILevelRepository {
 
   @override
   Future<List<Level>> getLevels() async {
+    if (_levelsCache != null) {
+      debugPrint('⚡ LevelRepositoryImpl.getLevels: Returning ${_levelsCache!.length} cached levels');
+      return _levelsCache!;
+    }
+
     try {
       final json = await apiClient.get('/api/v1/levels');
       final list = json['levels'] as List<dynamic>? ?? json as List<dynamic>;

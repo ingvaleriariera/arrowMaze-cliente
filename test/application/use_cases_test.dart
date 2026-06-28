@@ -5,6 +5,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/auth/login_use_case
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/register_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/in_memory_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
@@ -21,7 +22,7 @@ void main() {
     group('Game Use Cases', () {
       test('Scenario 1: LoadLevelUseCase returns GameSession in PlayingState', () async {
         final levelRepository = MockLevelRepository();
-        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository);
+        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository, boardCache: InMemoryBoardCache());
 
         final session = await loadLevelUseCase.execute('level_001');
 
@@ -38,7 +39,7 @@ void main() {
         final activateArrowUseCase = ActivateArrowUseCase(audioService: audioService);
 
         final levelRepository = MockLevelRepository();
-        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository);
+        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository, boardCache: InMemoryBoardCache());
         final session = await loadLevelUseCase.execute('level_001');
 
         // Add an arrow to the board for testing
@@ -56,7 +57,7 @@ void main() {
         final activateArrowUseCase = ActivateArrowUseCase(audioService: audioService);
 
         final levelRepository = MockLevelRepository();
-        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository);
+        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository, boardCache: InMemoryBoardCache());
         final session = await loadLevelUseCase.execute('level_001');
 
         // Execute a move on non-existent arrow (will fail)
@@ -76,7 +77,7 @@ void main() {
         );
 
         final levelRepository = MockLevelRepository();
-        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository);
+        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository, boardCache: InMemoryBoardCache());
         final session = await loadLevelUseCase.execute('level_001');
 
         // Create progress with 0 coins
@@ -102,7 +103,7 @@ void main() {
         );
 
         final levelRepository = MockLevelRepository();
-        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository);
+        final loadLevelUseCase = LoadLevelUseCase(levelRepository: levelRepository, boardCache: InMemoryBoardCache());
         final session = await loadLevelUseCase.execute('level_001');
 
         // Create progress with enough coins

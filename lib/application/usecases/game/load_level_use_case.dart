@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_builder.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 
 class LoadLevelUseCase {
   final ILevelRepository levelRepository;
+  final IBoardCache boardCache;
 
-  LoadLevelUseCase({required this.levelRepository});
+  LoadLevelUseCase({required this.levelRepository, required this.boardCache});
 
   Future<GameSession> execute(String levelId) async {
     debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId');
@@ -35,19 +38,28 @@ class LoadLevelUseCase {
     debugPrint('   Position.toKey() format:');
     validCells.take(5).forEach((pos) => debugPrint('  pos: "${pos.toKey()}"'));
 
-    // Deterministic seed from levelId so every player sees the same arrow
-    // layout for a given level (keeps leaderboard scores comparable).
-    final builder = BoardBuilder.create(seed: level.id.hashCode)
-        .setShape(shape)
-        .setDifficulty(level.difficulty);
-
-    debugPrint('   Generating arrows with difficulty=${level.difficulty}...');
-
-    final board = builder.build();
+    // A PreloadLevelsUseCase run may have already generated this board in
+    // the background while the player was on a previous level — skip the
+    // (expensive) generation entirely when that's the case.
+    final cachedBoard = boardCache.take(levelId);
+    final Board board;
+    final int calculatedMaxMoves;
+    if (cachedBoard != null) {
+      debugPrint('⚡ LoadLevelUseCase: Using preloaded board for $levelId');
+      board = cachedBoard;
+      calculatedMaxMoves =
+          BoardBuilder.calculateMaxMoves(board.arrows.length, level.difficulty.toUpperCase());
+    } else {
+      // Deterministic seed from levelId so every player sees the same
+      // arrow layout for a given level (keeps leaderboard scores comparable).
+      debugPrint('   Generating arrows with difficulty=${level.difficulty}...');
+      final builder = BoardBuilder.create(seed: level.id.hashCode)
+          .setShape(shape)
+          .setDifficulty(level.difficulty);
+      board = builder.build();
+      calculatedMaxMoves = builder.getCalculatedMaxMoves() ?? level.moveLimit;
+    }
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');
-
-    // Use calculated maxMoves from builder instead of backend moveLimit
-    final calculatedMaxMoves = builder.getCalculatedMaxMoves();
     debugPrint('   Calculated maxMoves: $calculatedMaxMoves (margin for ${level.difficulty})');
 
     // DEBUG: Print each arrow's blockedBy
@@ -65,7 +77,7 @@ class LoadLevelUseCase {
     final session = GameSession(
       board: board,
       levelId: level.id,
-      maxMoves: calculatedMaxMoves ?? level.moveLimit,
+      maxMoves: calculatedMaxMoves,
       timeRemaining: level.isTimed() ? level.timeLimit.getValue() : null,
     );
 

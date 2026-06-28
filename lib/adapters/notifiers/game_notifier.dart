@@ -5,6 +5,7 @@ import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/pause_level_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/restart_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/resume_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
@@ -22,6 +23,7 @@ class GameNotifier extends StateNotifier<GameState> {
   final RestartLevelUseCase restartLevelUseCase;
   final UsePowerUpUseCase usePowerUpUseCase;
   final SaveProgressUseCase saveProgressUseCase;
+  final PreloadLevelsUseCase preloadLevelsUseCase;
 
   Timer? _timer;
 
@@ -33,6 +35,7 @@ class GameNotifier extends StateNotifier<GameState> {
     required this.restartLevelUseCase,
     required this.usePowerUpUseCase,
     required this.saveProgressUseCase,
+    required this.preloadLevelsUseCase,
   }) : super(const GameState());
 
   Future<void> loadLevel(String levelId, String userId) async {
@@ -63,6 +66,14 @@ class GameNotifier extends StateNotifier<GameState> {
         debugPrint('⏱️  GameNotifier: Level is timed, would start timer here');
         _startTimer();
       }
+
+      // Fire-and-forget: warm the cache for the next couple of levels
+      // while the player is busy with this one, so selecting one of them
+      // next skips board generation entirely. A failure here must never
+      // affect the level that just loaded successfully.
+      unawaited(preloadLevelsUseCase
+          .execute(_nextLevelIds(levelId, 2))
+          .catchError((e) => debugPrint('⚠️  GameNotifier: Preload failed — $e')));
     } catch (e, stackTrace) {
       debugPrint('❌ GameNotifier.loadLevel: Exception caught');
       debugPrint('   Exception: $e');
@@ -194,6 +205,25 @@ class GameNotifier extends StateNotifier<GameState> {
     debugPrint('⏱️  GameNotifier._stopTimer: Stopping timer');
     _timer?.cancel();
     _timer = null;
+  }
+
+  /// Next [count] level ids following [levelId], assuming the
+  /// `level-NNN` zero-padded sequential naming used across the app
+  /// (level select sorts on the same convention). Best-effort: ids past
+  /// the last seeded level simply won't be found by PreloadLevelsUseCase
+  /// and are silently skipped there.
+  List<String> _nextLevelIds(String levelId, int count) {
+    final match = RegExp(r'^(.*?)(\d+)$').firstMatch(levelId);
+    if (match == null) return [];
+
+    final prefix = match.group(1)!;
+    final digits = match.group(2)!;
+    final number = int.parse(digits);
+
+    return List.generate(count, (i) {
+      final next = number + i + 1;
+      return '$prefix${next.toString().padLeft(digits.length, '0')}';
+    });
   }
 
   @override

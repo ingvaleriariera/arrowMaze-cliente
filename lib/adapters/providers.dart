@@ -10,6 +10,7 @@ import 'package:arrow_maze_cliente_copy/adapters/notifiers/settings_notifier.dar
 import 'package:arrow_maze_cliente_copy/adapters/repositories/auth_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/audio_service_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/in_memory_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/leaderboard_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/level_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/auth_state.dart';
@@ -24,6 +25,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/pause_level_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/restart_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/resume_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
@@ -62,9 +64,20 @@ final leaderboardRepositoryProvider = Provider((ref) => LeaderboardRepositoryImp
 
 final audioServiceProvider = Provider((ref) => AudioServiceImpl());
 
+// In-memory cache of pre-generated boards, shared by LoadLevelUseCase
+// (consumer) and PreloadLevelsUseCase (producer). Kept alive for the app's
+// lifetime, same as the other repository providers.
+final boardCacheProvider = Provider((ref) => InMemoryBoardCache());
+
 // Use Cases
 final loadLevelUseCaseProvider = Provider((ref) => LoadLevelUseCase(
   levelRepository: ref.watch(levelRepositoryProvider),
+  boardCache: ref.watch(boardCacheProvider),
+));
+
+final preloadLevelsUseCaseProvider = Provider((ref) => PreloadLevelsUseCase(
+  levelRepository: ref.watch(levelRepositoryProvider),
+  boardCache: ref.watch(boardCacheProvider),
 ));
 
 final activateArrowUseCaseProvider = Provider((ref) => ActivateArrowUseCase(
@@ -127,6 +140,7 @@ final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref
     restartLevelUseCase: ref.watch(restartLevelUseCaseProvider),
     usePowerUpUseCase: ref.watch(usePowerUpUseCaseProvider),
     saveProgressUseCase: ref.watch(saveProgressUseCaseProvider),
+    preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
   )
 );
 
@@ -142,6 +156,7 @@ final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref
 final levelSelectNotifierProvider = StateNotifierProvider<LevelSelectNotifier, LevelSelectState>((ref) =>
   LevelSelectNotifier(
     getLevelSummariesUseCase: ref.watch(getLevelSummariesUseCaseProvider),
+    preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
   )
 );
 
