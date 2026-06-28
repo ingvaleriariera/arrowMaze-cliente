@@ -1,21 +1,21 @@
-import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 
 /// In-memory implementation of [IBoardCache]. Lives only as long as the
-/// app process — there's no need to persist pre-generated boards across
-/// restarts, since regenerating from a level's deterministic seed is the
-/// same cost as a cache miss anyway.
+/// app process — there's no need to persist generated layouts across
+/// restarts, since a level's seed is deterministic and would reproduce
+/// the exact same layout anyway.
 class InMemoryBoardCache implements IBoardCache {
-  final Map<String, Board> _boards = {};
+  final Map<String, List<Arrow>> _layouts = {};
 
   @override
-  bool has(String levelId) => _boards.containsKey(levelId);
+  bool has(String levelId) => _layouts.containsKey(levelId);
 
   @override
-  void put(String levelId, Board board) {
-    _boards[levelId] = board;
+  void put(String levelId, List<Arrow> arrows) {
+    _layouts[levelId] = arrows;
   }
 
   @override
-  Board? take(String levelId) => _boards.remove(levelId);
+  List<Arrow>? get(String levelId) => _layouts[levelId];
 }

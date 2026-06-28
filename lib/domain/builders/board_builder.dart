@@ -23,6 +23,19 @@ class BoardBuilder {
 
   static BoardBuilder create({int? seed}) => BoardBuilder(seed: seed);
 
+  /// Builds a fresh, unplayed [Board] from an already-known arrow layout
+  /// (e.g. one pulled from [IBoardCache]) instead of searching for a new
+  /// one. Cheap and synchronous: it's just grid/graph bookkeeping over
+  /// arrows that already exist, none of BoardBuilder's randomized retry
+  /// loop runs.
+  static Board fromArrows(BoardShape shape, List<Arrow> arrows) {
+    final builder = BoardBuilder.create()..setShape(shape);
+    for (final arrow in arrows) {
+      builder.addArrow(arrow);
+    }
+    return builder.build();
+  }
+
   BoardBuilder setShape(BoardShape shape) {
     _shape = shape;
     return this;

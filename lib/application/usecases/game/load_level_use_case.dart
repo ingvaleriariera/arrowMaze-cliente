@@ -18,22 +18,28 @@ class LoadLevelUseCase {
     final level = await levelRepository.getLevel(levelId);
     debugPrint('   Level loaded: ${level.id}');
 
-    // A PreloadLevelsUseCase run may have already generated this board in
-    // the background while the player was on a previous level — skip the
-    // (expensive) generation entirely when that's the case.
-    final cachedBoard = boardCache.take(levelId);
+    // The arrow layout for a level is deterministic (seeded by levelId),
+    // so BoardBuilder's expensive randomized search for a valid puzzle
+    // only ever needs to run once per level for the app's lifetime — not
+    // once per visit. A cache hit (whether from a previous play of this
+    // level or from PreloadLevelsUseCase) skips straight to the cheap,
+    // synchronous step of building a fresh, unplayed Board from the
+    // already-known layout.
+    final cachedLayout = boardCache.get(levelId);
     final Board board;
     final int calculatedMaxMoves;
-    if (cachedBoard != null) {
-      debugPrint('⚡ LoadLevelUseCase: Using preloaded board for $levelId');
-      board = cachedBoard;
+    if (cachedLayout != null) {
+      debugPrint('⚡ LoadLevelUseCase: Reusing cached arrow layout for $levelId');
+      board = BoardBuilder.fromArrows(level.getBoardShape(), cachedLayout);
       calculatedMaxMoves =
           BoardBuilder.calculateMaxMoves(board.arrows.length, level.difficulty.toUpperCase());
     } else {
       // Deterministic seed from levelId so every player sees the same
       // arrow layout for a given level (keeps leaderboard scores comparable).
-      // Generation runs on a background isolate (a Web Worker on web) via
-      // compute() so it never blocks the UI thread/frame rendering.
+      // Generation runs on a background isolate (a real OS thread on
+      // native; on web it currently still runs inline — see compute()'s
+      // web implementation — but caching the result means it only ever
+      // costs once per level either way).
       debugPrint('   Generating arrows with difficulty=${level.difficulty} (background isolate)...');
       final result = await compute(
         generateBoard,
@@ -45,6 +51,7 @@ class LoadLevelUseCase {
       );
       board = result.board;
       calculatedMaxMoves = result.maxMoves;
+      boardCache.put(levelId, board.arrows.values.toList());
     }
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');
     debugPrint('   Calculated maxMoves: $calculatedMaxMoves (margin for ${level.difficulty})');
