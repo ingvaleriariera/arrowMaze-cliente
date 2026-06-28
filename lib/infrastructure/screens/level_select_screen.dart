@@ -6,8 +6,9 @@ import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 
-/// Only ask once per install whether to preload every level's board.
-const _kAskedPreloadAllPrefsKey = 'asked_preload_all';
+/// Only ask once per account whether to preload every level's board.
+/// Scoped by userId so logging into a different account gets asked again.
+String _askedPreloadAllPrefsKey(String userId) => 'asked_preload_all_$userId';
 
 class LevelSelectScreen extends ConsumerStatefulWidget {
   const LevelSelectScreen({Key? key}) : super(key: key);
@@ -32,7 +33,7 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       if (userId != null) {
         debugPrint('🎯 LevelSelectScreen: userId=$userId, calling loadSummaries()');
         ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId).then((_) {
-          _maybeAskToPreloadAll();
+          _maybeAskToPreloadAll(userId);
         });
       } else {
         debugPrint('⚠️  LevelSelectScreen: userId is null, not calling loadSummaries()');
@@ -40,12 +41,13 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
     });
   }
 
-  Future<void> _maybeAskToPreloadAll() async {
+  Future<void> _maybeAskToPreloadAll(String userId) async {
     if (!mounted || ref.read(levelSelectNotifierProvider).levels.isEmpty) return;
 
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_kAskedPreloadAllPrefsKey) ?? false) return;
-    await prefs.setBool(_kAskedPreloadAllPrefsKey, true);
+    final prefsKey = _askedPreloadAllPrefsKey(userId);
+    if (prefs.getBool(prefsKey) ?? false) return;
+    await prefs.setBool(prefsKey, true);
 
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
