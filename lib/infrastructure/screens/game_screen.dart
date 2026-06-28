@@ -204,18 +204,18 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildBody(GameState gameState, GameNotifier gameNotifier) {
-    if (gameState.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00F5A0)),
-      );
-    }
-
     if (gameState.error != null) {
       return Center(child: Text('Error: ${gameState.error}'));
     }
 
-    if (gameState.session == null) {
-      return const Center(child: Text('Failed to load game'));
+    // Also spin for the one frame between navigating here and loadLevel()
+    // actually setting isLoading=true (it only runs from a postFrameCallback
+    // in initState) — without this, that gap briefly showed "Failed to
+    // load game" instead of a loading indicator.
+    if (gameState.isLoading || gameState.session == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF00F5A0)),
+      );
     }
 
     final session = gameState.session!;
