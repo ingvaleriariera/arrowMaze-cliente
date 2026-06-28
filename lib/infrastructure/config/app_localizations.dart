@@ -45,6 +45,7 @@ class AppLocalizations {
           'You can download every level\'s board now so they open instantly later, or keep downloading them one by one as you play.',
       'notNow': 'Not now',
       'downloadAll': 'Download all',
+      'downloadingLevels': 'Downloading levels...',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -85,6 +86,7 @@ class AppLocalizations {
           'Podés descargar el tablero de todos los niveles ahora para que abran al instante después, o seguir descargándolos de a uno mientras jugás.',
       'notNow': 'Ahora no',
       'downloadAll': 'Descargar todos',
+      'downloadingLevels': 'Descargando niveles...',
     },
   };
 

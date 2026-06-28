@@ -83,58 +83,47 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
 
     debugPrint('🎨 LevelSelectScreen.build: isLoading=${levelSelectState.isLoading}, levels=${levelSelectState.levels.length}');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.translate('levelSelect')),
-        bottom: levelSelectState.isPreloadingAll
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(20),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Column(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: levelSelectState.preloadProgress,
-                          minHeight: 6,
-                          backgroundColor: const Color(0xFF1a1a2e),
-                          color: const Color(0xFF00F5A0),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${levelSelectState.preloadCompleted}/${levelSelectState.preloadTotal}',
-                        style: const TextStyle(fontSize: 10, color: Color(0xFF888899)),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : null,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.leaderboard),
-            onPressed: levelSelectState.levels.isEmpty
-                ? null
-                : () => context.go('/leaderboard/${levelSelectState.levels.first.levelId}'),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: Text(l10n.translate('levelSelect')),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.leaderboard),
+                onPressed: levelSelectState.levels.isEmpty
+                    ? null
+                    : () => context.go('/leaderboard/${levelSelectState.levels.first.levelId}'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => context.go('/settings'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: () async {
+                  await authNotifier.logout();
+                  if (context.mounted) {
+                    context.go('/login');
+                  }
+                },
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.go('/settings'),
+          body: _buildBody(context, levelSelectState),
+        ),
+        // Full-screen blocking overlay while every level's board is being
+        // generated. Without this, tapping a level whose board hasn't
+        // been preloaded yet starts a second generation that competes
+        // with the batch still running, which is what made the game
+        // screen itself feel stuck mid-play.
+        if (levelSelectState.isPreloadingAll)
+          _PreloadOverlay(
+            completed: levelSelectState.preloadCompleted,
+            total: levelSelectState.preloadTotal,
+            progress: levelSelectState.preloadProgress,
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await authNotifier.logout();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-          ),
-        ],
-      ),
-      body: _buildBody(context, levelSelectState),
+      ],
     );
   }
 
@@ -177,7 +166,7 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       itemBuilder: (context, index) {
         final level = state.levels[index];
         return GestureDetector(
-          onTap: !level.unlocked
+          onTap: !level.unlocked || state.isPreloadingAll
               ? null
               : () {
                   debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
@@ -226,6 +215,72 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Opaque full-screen barrier with a determinate progress bar, shown
+/// while every level is being preloaded. It both communicates real
+/// progress and — via the outer GestureDetector swallowing taps — keeps
+/// the player from opening a level until the batch finishes, since doing
+/// so would start a second board generation competing with this one.
+class _PreloadOverlay extends StatelessWidget {
+  final int completed;
+  final int total;
+  final double progress;
+
+  const _PreloadOverlay({
+    required this.completed,
+    required this.total,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return Positioned.fill(
+      child: GestureDetector(
+        // Swallow every tap/drag so nothing underneath is reachable.
+        onTap: () {},
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          color: const Color(0xE6080812),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    l10n.translate('downloadingLevels'),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: total == 0 ? null : progress,
+                      minHeight: 10,
+                      backgroundColor: const Color(0xFF1a1a2e),
+                      color: const Color(0xFF00F5A0),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$completed/$total',
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF888899)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
