@@ -9,7 +9,9 @@ import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels
 import 'package:arrow_maze_cliente_copy/application/usecases/game/restart_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/resume_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
@@ -23,9 +25,11 @@ class GameNotifier extends StateNotifier<GameState> {
   final RestartLevelUseCase restartLevelUseCase;
   final UsePowerUpUseCase usePowerUpUseCase;
   final SaveProgressUseCase saveProgressUseCase;
+  final GetLocalProgressUseCase getLocalProgressUseCase;
   final PreloadLevelsUseCase preloadLevelsUseCase;
 
   Timer? _timer;
+  String? _userId;
 
   GameNotifier({
     required this.loadLevelUseCase,
@@ -35,12 +39,14 @@ class GameNotifier extends StateNotifier<GameState> {
     required this.restartLevelUseCase,
     required this.usePowerUpUseCase,
     required this.saveProgressUseCase,
+    required this.getLocalProgressUseCase,
     required this.preloadLevelsUseCase,
   }) : super(const GameState());
 
   Future<void> loadLevel(String levelId, String userId) async {
     debugPrint('🎮 GameNotifier.loadLevel called with: $levelId');
-    
+    _userId = userId;
+
     // Clear the previous session immediately so a stale VictoryState/
     // DefeatState from the last level can't be shown while this one loads.
     state = state.copyWith(isLoading: true, error: null, clearSession: true);
@@ -49,13 +55,23 @@ class GameNotifier extends StateNotifier<GameState> {
     try {
       debugPrint('📞 GameNotifier: Calling loadLevelUseCase.execute($levelId)');
       final session = await loadLevelUseCase.execute(levelId);
-      
+
       debugPrint('✅ GameNotifier: LoadLevelUseCase returned session');
       debugPrint('   Session: levelId=${session.levelId}, maxMoves=${session.maxMoves}');
+
+      // Progress is fetched once and then kept in state across level
+      // loads within this session — recordCompletion() on victory needs
+      // it to know which levels are already done.
+      var progress = state.progress;
+      if (progress == null) {
+        progress = await getLocalProgressUseCase.execute(userId) ?? GameProgress(userId: userId);
+        debugPrint('📖 GameNotifier: Loaded progress (${progress.completedLevels.length} completed)');
+      }
 
       debugPrint('🔄 GameNotifier: Updating state with session');
       state = state.copyWith(
         session: session,
+        progress: progress,
         isLoading: false,
       );
       
@@ -124,6 +140,17 @@ class GameNotifier extends StateNotifier<GameState> {
         if (state.session!.state is VictoryState ||
             state.session!.state is DefeatState) {
           _stopTimer();
+
+          if (state.session!.state is VictoryState) {
+            // This is what actually unlocks the next level — without
+            // recording the completion here, GetLevelSummariesUseCase
+            // never sees this level as done and the next one stays locked.
+            final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);
+            progress.recordCompletion(state.session!.levelId, state.session!.score);
+            debugPrint('🏆 GameNotifier: Recorded completion of ${state.session!.levelId} (score: ${state.session!.score})');
+            state = state.copyWith(progress: progress);
+          }
+
           if (state.progress != null) {
             await saveProgressUseCase.execute(state.progress!);
           }

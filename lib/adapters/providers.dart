@@ -140,6 +140,7 @@ final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref
     restartLevelUseCase: ref.watch(restartLevelUseCaseProvider),
     usePowerUpUseCase: ref.watch(usePowerUpUseCaseProvider),
     saveProgressUseCase: ref.watch(saveProgressUseCaseProvider),
+    getLocalProgressUseCase: ref.watch(getLocalProgressUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
   )
 );

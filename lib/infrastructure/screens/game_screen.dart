@@ -97,8 +97,14 @@ class _GameScreenState extends ConsumerState<GameScreen>
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
-    gameNotifier.loadLevel(widget.levelId, 'user_123');
+    gameNotifier.loadLevel(widget.levelId, _currentUserId());
   }
+
+  // GameNotifier saves completion progress keyed by this id, and
+  // LevelSelectScreen later reads it back keyed by the same auth user id
+  // to decide what's unlocked — using a different (hardcoded) id here
+  // would silently break that link.
+  String _currentUserId() => ref.read(authNotifierProvider).userId ?? 'guest';
 
   void _startExitAnimation(Arrow arrow, BoardShape shape) {
     final controller = AnimationController(
@@ -392,7 +398,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 ElevatedButton(
                   onPressed: () {
                     setState(() => _showPause = false);
-                    gameNotifier.restart(widget.levelId, 'user_123');
+                    gameNotifier.restart(widget.levelId, _currentUserId());
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
                   child: Text(l10n.translate('restart')),
