@@ -57,11 +57,24 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
   Future<void> preloadAllLevels() async {
     if (state.levels.isEmpty || state.isPreloadingAll) return;
 
-    debugPrint('📦 LevelSelectNotifier: Preloading all ${state.levels.length} levels');
-    state = state.copyWith(isPreloadingAll: true);
+    final levelIds = state.levels.map((l) => l.levelId).toList();
+    debugPrint('📦 LevelSelectNotifier: Preloading all ${levelIds.length} levels');
+    state = state.copyWith(
+      isPreloadingAll: true,
+      preloadCompleted: 0,
+      preloadTotal: levelIds.length,
+    );
 
     try {
-      await preloadLevelsUseCase.execute(state.levels.map((l) => l.levelId).toList());
+      await preloadLevelsUseCase.execute(
+        levelIds,
+        onProgress: (completed, total) {
+          // Each callback fires after one level's generation finishes on
+          // the background isolate, so updating state here animates a
+          // real progress bar instead of a single before/after jump.
+          state = state.copyWith(preloadCompleted: completed, preloadTotal: total);
+        },
+      );
     } catch (e) {
       debugPrint('⚠️  LevelSelectNotifier: preloadAllLevels failed - $e');
     } finally {

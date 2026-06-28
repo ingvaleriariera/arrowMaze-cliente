@@ -1,11 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_builder.dart';
+import 'package:arrow_maze_cliente_copy/domain/builders/board_generation_request.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
-import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
-import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 
 class LoadLevelUseCase {
   final ILevelRepository levelRepository;
@@ -16,27 +15,8 @@ class LoadLevelUseCase {
   Future<GameSession> execute(String levelId) async {
     debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId');
 
-    // TEST: Verify Position.translate() correctness
-    debugPrint('📍 Position.translate() test:');
-    final testPos = Position(2, 3);
-    debugPrint('  right: ${testPos.translate(Direction.right).toKey()} (expect 3,3)');
-    debugPrint('  down:  ${testPos.translate(Direction.down).toKey()} (expect 2,4)');
-    debugPrint('  up:    ${testPos.translate(Direction.up).toKey()} (expect 2,2)');
-    debugPrint('  left:  ${testPos.translate(Direction.left).toKey()} (expect 1,3)');
-
     final level = await levelRepository.getLevel(levelId);
     debugPrint('   Level loaded: ${level.id}');
-
-    final shape = level.getBoardShape();
-    final validCells = shape.getCells();
-    debugPrint('   Board shape: ${validCells.length} valid cells');
-
-    // TEST: Verify remaining uses same key format as position.toKey()
-    debugPrint('📋 Remaining keys format test (first 5):');
-    final remaining = shape.validCells;
-    remaining.take(5).forEach((key) => debugPrint('  key: "$key"'));
-    debugPrint('   Position.toKey() format:');
-    validCells.take(5).forEach((pos) => debugPrint('  pos: "${pos.toKey()}"'));
 
     // A PreloadLevelsUseCase run may have already generated this board in
     // the background while the player was on a previous level — skip the
@@ -52,12 +32,19 @@ class LoadLevelUseCase {
     } else {
       // Deterministic seed from levelId so every player sees the same
       // arrow layout for a given level (keeps leaderboard scores comparable).
-      debugPrint('   Generating arrows with difficulty=${level.difficulty}...');
-      final builder = BoardBuilder.create(seed: level.id.hashCode)
-          .setShape(shape)
-          .setDifficulty(level.difficulty);
-      board = builder.build();
-      calculatedMaxMoves = builder.getCalculatedMaxMoves() ?? level.moveLimit;
+      // Generation runs on a background isolate (a Web Worker on web) via
+      // compute() so it never blocks the UI thread/frame rendering.
+      debugPrint('   Generating arrows with difficulty=${level.difficulty} (background isolate)...');
+      final result = await compute(
+        generateBoard,
+        BoardGenerationRequest(
+          seed: level.id.hashCode,
+          boardLayoutJson: level.boardLayout,
+          difficulty: level.difficulty,
+        ),
+      );
+      board = result.board;
+      calculatedMaxMoves = result.maxMoves;
     }
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');
     debugPrint('   Calculated maxMoves: $calculatedMaxMoves (margin for ${level.difficulty})');

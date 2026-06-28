@@ -84,21 +84,33 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.translate('levelSelect')),
-        actions: [
-          if (levelSelectState.isPreloadingAll)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF00F5A0),
+        bottom: levelSelectState.isPreloadingAll
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(20),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: levelSelectState.preloadProgress,
+                          minHeight: 6,
+                          backgroundColor: const Color(0xFF1a1a2e),
+                          color: const Color(0xFF00F5A0),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${levelSelectState.preloadCompleted}/${levelSelectState.preloadTotal}',
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF888899)),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
+              )
+            : null,
+        actions: [
           IconButton(
             icon: const Icon(Icons.leaderboard),
             onPressed: levelSelectState.levels.isEmpty
@@ -191,17 +203,21 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (!level.unlocked)
-                  const Icon(Icons.lock, color: Color(0xFF555566), size: 32)
-                else if (level.completed)
+                if (level.completed)
                   const Icon(Icons.check_circle, color: Colors.green, size: 32)
                 else
                   Text(
                     'Level ${index + 1}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: level.unlocked ? null : const Color(0xFFFF3366),
+                    ),
                   ),
                 const SizedBox(height: 8),
-                if (level.unlocked)
+                if (!level.unlocked)
+                  const Icon(Icons.lock, color: Color(0xFF555566), size: 18)
+                else
                   Text(level.completed ? 'Score: ${level.bestScore}' : level.difficulty),
               ],
             ),
