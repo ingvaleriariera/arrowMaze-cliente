@@ -46,13 +46,30 @@ class GetLevelSummariesUseCase {
       final effectiveProgress = progress ?? GameProgress(userId: userId);
       debugPrint('🔄 GetLevelSummariesUseCase: Using effective progress: ${effectiveProgress.completedLevels.length} completed, ${effectiveProgress.coins} coins');
 
+      // Unlocking depends on sequential order (level N unlocks once N-1
+      // is completed), so sort by the level-NNN numeric suffix first —
+      // the order the backend returns levels in isn't guaranteed.
+      final orderedLevels = List.of(levels)
+        ..sort((a, b) {
+          final numA = int.tryParse(a.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          final numB = int.tryParse(b.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          return numA.compareTo(numB);
+        });
+
       final summaries = <LevelSummaryDTO>[];
 
-      for (final level in levels) {
+      for (int i = 0; i < orderedLevels.length; i++) {
+        final level = orderedLevels[i];
         final isCompleted = effectiveProgress.isCompleted(level.id);
         final bestScore = effectiveProgress.getBestScore(level.id) ?? 0;
+        // First level always unlocked; any other unlocks once the
+        // previous one in sequence is completed. What "completed" should
+        // require (lives, score thresholds, etc.) is still TBD — for now
+        // it's just GameProgress.isCompleted.
+        final isUnlocked =
+            i == 0 || effectiveProgress.isCompleted(orderedLevels[i - 1].id);
 
-        debugPrint('📝 GetLevelSummariesUseCase: Level ${level.id} - completed: $isCompleted, score: $bestScore');
+        debugPrint('📝 GetLevelSummariesUseCase: Level ${level.id} - completed: $isCompleted, score: $bestScore, unlocked: $isUnlocked');
 
         summaries.add(
           LevelSummaryDTO(
@@ -61,6 +78,7 @@ class GetLevelSummariesUseCase {
             completed: isCompleted,
             bestScore: bestScore,
             isTimed: level.isTimed(),
+            unlocked: isUnlocked,
           ),
         );
       }

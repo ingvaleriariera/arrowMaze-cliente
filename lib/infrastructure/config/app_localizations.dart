@@ -40,6 +40,11 @@ class AppLocalizations {
       'sound': 'Sound',
       'music': 'Music',
       'vibration': 'Vibration',
+      'preloadAllTitle': 'Download all levels?',
+      'preloadAllMessage':
+          'You can download every level\'s board now so they open instantly later, or keep downloading them one by one as you play.',
+      'notNow': 'Not now',
+      'downloadAll': 'Download all',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -75,6 +80,11 @@ class AppLocalizations {
       'sound': 'Sonido',
       'music': 'Música',
       'vibration': 'Vibración',
+      'preloadAllTitle': '¿Descargar todos los niveles?',
+      'preloadAllMessage':
+          'Podés descargar el tablero de todos los niveles ahora para que abran al instante después, o seguir descargándolos de a uno mientras jugás.',
+      'notNow': 'Ahora no',
+      'downloadAll': 'Descargar todos',
     },
   };
 

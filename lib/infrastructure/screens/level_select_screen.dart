@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+
+/// Only ask once per install whether to preload every level's board.
+const _kAskedPreloadAllPrefsKey = 'asked_preload_all';
 
 class LevelSelectScreen extends ConsumerStatefulWidget {
   const LevelSelectScreen({Key? key}) : super(key: key);
@@ -27,11 +31,46 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       
       if (userId != null) {
         debugPrint('🎯 LevelSelectScreen: userId=$userId, calling loadSummaries()');
-        ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId);
+        ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId).then((_) {
+          _maybeAskToPreloadAll();
+        });
       } else {
         debugPrint('⚠️  LevelSelectScreen: userId is null, not calling loadSummaries()');
       }
     });
+  }
+
+  Future<void> _maybeAskToPreloadAll() async {
+    if (!mounted || ref.read(levelSelectNotifierProvider).levels.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kAskedPreloadAllPrefsKey) ?? false) return;
+    await prefs.setBool(_kAskedPreloadAllPrefsKey, true);
+
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        title: Text(l10n.translate('preloadAllTitle')),
+        content: Text(l10n.translate('preloadAllMessage')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.translate('notNow')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.translate('downloadAll')),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted == true) {
+      ref.read(levelSelectNotifierProvider.notifier).preloadAllLevels();
+    }
   }
 
   @override
@@ -46,6 +85,20 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       appBar: AppBar(
         title: Text(l10n.translate('levelSelect')),
         actions: [
+          if (levelSelectState.isPreloadingAll)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF00F5A0),
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.leaderboard),
             onPressed: levelSelectState.levels.isEmpty
@@ -110,30 +163,37 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       itemBuilder: (context, index) {
         final level = state.levels[index];
         return GestureDetector(
-          onTap: () {
-            debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
+          onTap: !level.unlocked
+              ? null
+              : () {
+                  debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
 
-            // GameScreen.initState triggers the actual load for this levelId,
-            // so just navigate here to avoid a duplicate loadLevel() call.
-            debugPrint('   → Navigating to /game/${level.levelId}');
-            context.go(
-              '/game/${level.levelId}',
-              extra: {
-                'difficulty': level.difficulty,
-                'levelNumber': index + 1,
-              },
-            );
-          },
+                  // GameScreen.initState triggers the actual load for this levelId,
+                  // so just navigate here to avoid a duplicate loadLevel() call.
+                  debugPrint('   → Navigating to /game/${level.levelId}');
+                  context.go(
+                    '/game/${level.levelId}',
+                    extra: {
+                      'difficulty': level.difficulty,
+                      'levelNumber': index + 1,
+                    },
+                  );
+                },
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1a1a2e),
-              border: Border.all(color: const Color(0xFF00F5A0), width: 2),
+              color: level.unlocked ? const Color(0xFF1a1a2e) : const Color(0xFF131320),
+              border: Border.all(
+                color: level.unlocked ? const Color(0xFF00F5A0) : const Color(0xFF333344),
+                width: 2,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (level.completed)
+                if (!level.unlocked)
+                  const Icon(Icons.lock, color: Color(0xFF555566), size: 32)
+                else if (level.completed)
                   const Icon(Icons.check_circle, color: Colors.green, size: 32)
                 else
                   Text(
@@ -141,10 +201,8 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 const SizedBox(height: 8),
-                if (level.completed)
-                  Text('Score: ${level.bestScore}')
-                else
-                  Text(level.difficulty),
+                if (level.unlocked)
+                  Text(level.completed ? 'Score: ${level.bestScore}' : level.difficulty),
               ],
             ),
           ),

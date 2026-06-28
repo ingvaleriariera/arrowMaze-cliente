@@ -2,12 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels_use_case.dart';
 
 class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
   final GetLevelSummariesUseCase getLevelSummariesUseCase;
+  final PreloadLevelsUseCase preloadLevelsUseCase;
 
-  LevelSelectNotifier({required this.getLevelSummariesUseCase})
-      : super(const LevelSelectState());
+  LevelSelectNotifier({
+    required this.getLevelSummariesUseCase,
+    required this.preloadLevelsUseCase,
+  }) : super(const LevelSelectState());
 
   Future<void> loadSummaries(String userId) async {
     debugPrint('🔄 LevelSelectNotifier: Starting loadSummaries for userId=$userId');
@@ -47,6 +51,21 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
         isLoading: false,
         error: e.toString(),
       );
+    }
+  }
+
+  Future<void> preloadAllLevels() async {
+    if (state.levels.isEmpty || state.isPreloadingAll) return;
+
+    debugPrint('📦 LevelSelectNotifier: Preloading all ${state.levels.length} levels');
+    state = state.copyWith(isPreloadingAll: true);
+
+    try {
+      await preloadLevelsUseCase.execute(state.levels.map((l) => l.levelId).toList());
+    } catch (e) {
+      debugPrint('⚠️  LevelSelectNotifier: preloadAllLevels failed - $e');
+    } finally {
+      state = state.copyWith(isPreloadingAll: false);
     }
   }
 }
