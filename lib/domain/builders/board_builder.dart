@@ -98,43 +98,96 @@ class BoardBuilder {
   }
 
   Board _generateAndBuild() {
-    _arrows.clear();
+    Map<String, Arrow>? bestArrows;
+    var bestStuckCount = 1 << 30;
 
-    // Try up to 60 times to generate a VALID puzzle (not all arrows free).
-    // Each attempt rebuilds the whole board graph, so this is the most
-    // expensive loop in generation — keep it tight now that difficulty
-    // is mapped correctly and longer arrows make a valid puzzle easy to find.
-    for (int attempt = 0; attempt < 60; attempt++) {
+    // Try up to 80 times to generate a VALID, fully solvable puzzle (not
+    // all arrows free, and no arrow left permanently stuck). Each attempt
+    // rebuilds the whole board graph, so this is the most expensive loop
+    // in generation — keep it tight now that difficulty is mapped
+    // correctly and longer arrows make a valid puzzle easy to find.
+    //
+    // _generateArrows can return false (hit its iteration/fail-streak cap
+    // before covering every cell) — still run _fillUncoveredCells and the
+    // solvability probe on whatever it managed rather than discarding the
+    // attempt outright, since a partial-but-solvable layout plus a filled
+    // remainder is still a usable candidate.
+    for (int attempt = 0; attempt < 80; attempt++) {
       _arrows.clear();
-      final generated = _generateArrows();
-      if (!generated) continue;
-
-      // Build board and graph to check if it's a valid puzzle
+      _generateArrows();
       _fillUncoveredCells();
-      final board = _buildWithExistingArrows();
-      final activatable = board.graph.getActivatable();
+
       final totalArrows = _arrows.length;
+      if (totalArrows <= 3) continue;
 
-      debugPrint(
-          '🧪 Generation attempt $attempt: $totalArrows arrows, ${activatable.length} activatable');
-
-      // Valid puzzle = NOT all arrows are free AND have at least 4 arrows
-      if (activatable.length < totalArrows && totalArrows > 3) {
-        debugPrint('✅ Valid puzzle found!');
-        _calculatedMaxMoves = calculateMaxMoves(totalArrows, _difficultyStr);
-        return board;
+      // Probe on a throwaway graph: _countUnsolvable drains it via
+      // removeArrow, so the board actually returned below needs its own
+      // fresh one.
+      final probe = _buildWithExistingArrows();
+      final activatable = probe.graph.getActivatable();
+      if (activatable.length >= totalArrows) {
+        debugPrint(
+            '🧪 Generation attempt $attempt: all arrows free, retrying...');
+        continue;
       }
 
+      // A filled-in leftover cell (or any other blocking combination) can
+      // leave one or more arrows with no valid removal order — a level
+      // that looks fine but can never be finished. Simulating a full
+      // playthrough (remove every currently activatable arrow, repeat)
+      // catches that, which just checking "not all arrows start free"
+      // doesn't.
+      final stuck = _countUnsolvable(probe);
       debugPrint(
-          '❌ Invalid: all arrows free or too few arrows, retrying...');
+          '🧪 Generation attempt $attempt: $totalArrows arrows, ${activatable.length} activatable, $stuck stuck');
+
+      if (stuck == 0) {
+        debugPrint('✅ Valid puzzle found!');
+        _calculatedMaxMoves = calculateMaxMoves(totalArrows, _difficultyStr);
+        return _buildWithExistingArrows();
+      }
+
+      if (stuck < bestStuckCount) {
+        bestStuckCount = stuck;
+        bestArrows = Map.of(_arrows);
+      }
     }
 
-    // Fallback: use the last generated board even if not ideal
-    debugPrint('⚠️  Max attempts reached, using last generated board');
-    _fillUncoveredCells();
+    // Every attempt left something unsolvable — ship the closest call we
+    // saw (fewest permanently-stuck arrows) instead of blindly the
+    // arbitrary last attempt, which could be far worse.
+    debugPrint(
+        '⚠️  Max attempts reached, using best candidate ($bestStuckCount stuck arrow(s))');
+    if (bestArrows != null) {
+      _arrows
+        ..clear()
+        ..addAll(bestArrows);
+    }
     final board = _buildWithExistingArrows();
     _calculatedMaxMoves = calculateMaxMoves(_arrows.length, _difficultyStr);
     return board;
+  }
+
+  /// Number of arrows with no valid removal order, simulated by
+  /// repeatedly removing every currently activatable arrow — exactly
+  /// like a player clearing the board — until nothing more can be
+  /// removed. Mutates [board]'s graph in place, so callers must only use
+  /// this on a throwaway probe board, never the one that's actually
+  /// returned.
+  int _countUnsolvable(Board board) {
+    final remaining = Set<String>.from(board.arrows.keys);
+
+    while (remaining.isNotEmpty) {
+      final activatable =
+          board.graph.getActivatable().where(remaining.contains).toList();
+      if (activatable.isEmpty) break;
+      for (final id in activatable) {
+        board.graph.removeArrow(id);
+        remaining.remove(id);
+      }
+    }
+
+    return remaining.length;
   }
 
   static const int _maxGenerationIterations = 200;
@@ -217,17 +270,47 @@ class BoardBuilder {
 
     while (missing.isNotEmpty) {
       final startPos = _positionFromKey(missing.first);
-      final path = _growPath(startPos, 2, missing);
-      final ownCells = path.map((p) => p.toKey()).toSet();
-      final directions = _getVectorsForPath(path);
+      final grown = _growPath(startPos, 2, missing);
 
-      var chosen = directions.first;
+      // The grown 2-cell snake only offers the one direction its travel
+      // forces. If that's blocked, prefer a lone single cell instead,
+      // which gets to try all 4 directions — better odds of finding one
+      // that's immediately free rather than starting out blocked (still
+      // fine either way: _isFullySolvable in _generateAndBuild rejects
+      // the whole attempt if a chosen direction turns out to make the
+      // board unsolvable, so this is just trying to avoid that retry).
+      var path = grown;
+      var ownCells = grown.map((p) => p.toKey()).toSet();
+      var directions = _getVectorsForPath(grown);
+      Direction? chosen;
       for (final vec in directions) {
-        if (_isActivatable(path.last, vec, grid, ownCells: ownCells)) {
+        if (_isActivatable(grown.last, vec, grid, ownCells: ownCells)) {
           chosen = vec;
           break;
         }
       }
+
+      if (chosen == null && grown.length > 1) {
+        path = [startPos];
+        ownCells = {startPos.toKey()};
+        directions = _getVectorsForPath(path);
+        for (final vec in directions) {
+          if (_isActivatable(startPos, vec, grid, ownCells: ownCells)) {
+            chosen = vec;
+            break;
+          }
+        }
+      }
+
+      // Still nothing immediately free: fall back to any direction that
+      // at least doesn't run into this arrow's own not-yet-registered
+      // body. Being blocked by another arrow at generation time is normal
+      // (that's the whole game) as long as it's eventually solvable.
+      chosen ??= directions.firstWhere(
+        (vec) => _isActivatable(
+            path.last, vec, const <String, String>{}, ownCells: ownCells),
+        orElse: () => directions.first,
+      );
 
       final arrowId = 'arrow_${_arrows.length}';
       final segments = _createArrowSegments(path, chosen);
