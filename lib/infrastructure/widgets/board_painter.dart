@@ -191,9 +191,6 @@ class BoardPainter extends CustomPainter {
   /// everywhere the stroke actually travels.
   void _drawGradientPath(Canvas canvas, Path path, Color col, double alpha,
       double strokeWidth, double? blurSigma) {
-    final metrics = path.computeMetrics().toList();
-    final totalLength = metrics.fold<double>(0.0, (sum, m) => sum + m.length);
-
     Paint paintFor(Color color) {
       final paint = Paint()
         ..color = color
@@ -207,15 +204,30 @@ class BoardPainter extends CustomPainter {
       return paint;
     }
 
-    if (totalLength <= 0) {
-      canvas.drawPath(path, paintFor(col.withAlpha((alpha * 255).toInt())));
-      return;
-    }
-
     final tailColor = col.withAlpha((alpha * 0.55 * 255).toInt());
     final headColor = col.withAlpha((alpha * 255).toInt());
 
-    const resolution = 28;
+    // The blurred glow pass diffuses color so much the arc-length gradient
+    // is barely visible in it anyway — draw it once with the path's
+    // average color instead of paying for a full per-segment subdivision
+    // (with MaskFilter.blur, by far the most expensive part) just for a
+    // layer where nobody can see that gradient. This is what made the
+    // board noticeably slower with many arrows on screen (start of a
+    // level) and lighter as arrows exit through play.
+    if (blurSigma != null) {
+      canvas.drawPath(path, paintFor(Color.lerp(tailColor, headColor, 0.5)!));
+      return;
+    }
+
+    final metrics = path.computeMetrics().toList();
+    final totalLength = metrics.fold<double>(0.0, (sum, m) => sum + m.length);
+
+    if (totalLength <= 0) {
+      canvas.drawPath(path, paintFor(headColor));
+      return;
+    }
+
+    const resolution = 10;
     double traveled = 0;
     for (final metric in metrics) {
       final segLen = metric.length;
