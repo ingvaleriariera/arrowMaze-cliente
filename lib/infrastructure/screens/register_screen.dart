@@ -21,6 +21,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String? _emailError;
   String? _usernameError;
   String? _passwordError;
+  bool _showPassword = false;
 
   @override
   void initState() {
@@ -170,11 +171,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _passwordController,
-              obscureText: true,
+              obscureText: !_showPassword,
               enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('password'),
                 border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showPassword ? Icons.visibility : Icons.visibility_off,
+                    color: const Color(0xFF00F5A0),
+                  ),
+                  onPressed: () => setState(() => _showPassword = !_showPassword),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -223,6 +231,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ? const CircularProgressIndicator(color: Colors.black)
                     : Text(l10n.translate('register')),
               ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: authState.isLoading ? null : () => context.go('/login'),
+              child: const Text('Volver a login'),
             ),
           ],
         ),

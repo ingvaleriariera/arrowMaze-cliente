@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
 
   String? _emailOrUsernameError;
+  bool _showPassword = false;
 
   @override
   void initState() {
@@ -120,11 +121,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _passwordController,
-              obscureText: true,
+              obscureText: !_showPassword,
               enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('password'),
                 border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showPassword ? Icons.visibility : Icons.visibility_off,
+                    color: const Color(0xFF00F5A0),
+                  ),
+                  onPressed: () => setState(() => _showPassword = !_showPassword),
+                ),
               ),
             ),
             const SizedBox(height: 24),
