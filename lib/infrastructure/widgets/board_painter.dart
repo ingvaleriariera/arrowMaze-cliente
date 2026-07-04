@@ -144,7 +144,7 @@ class BoardPainter extends CustomPainter {
       final startY = c.dy - direction.dy * cellSize * 0.28;
       final path = Path()..moveTo(startX, startY)..lineTo(c.dx, c.dy);
 
-      _drawGradientPath(canvas, path, col, alpha * 0.6, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, alpha, bw, flash != null ? 24 : 12);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
       _drawHead(canvas, c.dx, c.dy, direction, hw, hl, col, alpha);
     } else {
@@ -175,7 +175,7 @@ class BoardPainter extends CustomPainter {
       final last = cellCenters.last;
       path.lineTo(last.dx, last.dy);
 
-      _drawGradientPath(canvas, path, col, alpha * 0.6, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, alpha, bw, flash != null ? 24 : 12);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
       _drawHead(canvas, last.dx, last.dy, direction, hw, hl, col, alpha);
     }
@@ -204,7 +204,7 @@ class BoardPainter extends CustomPainter {
       return paint;
     }
 
-    final tailColor = col.withAlpha((alpha * 0.55 * 255).toInt());
+    final tailColor = col.withAlpha((alpha * 255).toInt());
     final headColor = col.withAlpha((alpha * 255).toInt());
 
     // The blurred glow pass diffuses color so much the arc-length gradient
