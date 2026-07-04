@@ -22,11 +22,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required this.syncProgressUseCase,
   }) : super(const AuthState());
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String emailOrUsername, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      debugPrint('🔐 AuthNotifier.login: Attempting login for $email');
-      final input = LoginInputDTO(email: email, password: password);
+      debugPrint('🔐 AuthNotifier.login: Attempting login for $emailOrUsername');
+      final input = LoginInputDTO(emailOrUsername: emailOrUsername, password: password);
       final result = await loginUseCase.execute(input);
       
       debugPrint('✅ Login successful, userId=${result.userId}');

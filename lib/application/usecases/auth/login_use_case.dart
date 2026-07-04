@@ -8,6 +8,6 @@ class LoginUseCase {
   LoginUseCase({required this.authRepository});
 
   Future<AuthResultDTO> execute(LoginInputDTO input) async {
-    return authRepository.login(input.email, input.password);
+    return authRepository.login(input.emailOrUsername, input.password);
   }
 }

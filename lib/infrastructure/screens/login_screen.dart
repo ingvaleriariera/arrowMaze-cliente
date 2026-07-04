@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/domain/validators/auth_validator.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -12,21 +13,37 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _emailController = TextEditingController();
+  final _emailOrUsernameController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  String? _emailOrUsernameError;
 
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(_onInputChanged);
+    _emailOrUsernameController.addListener(_onEmailOrUsernameChanged);
     _passwordController.addListener(_onInputChanged);
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _emailOrUsernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onEmailOrUsernameChanged() {
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    authNotifier.clearError();
+
+    final input = _emailOrUsernameController.text;
+    if (input.isEmpty) {
+      setState(() => _emailOrUsernameError = null);
+      return;
+    }
+
+    final result = AuthValidator.validateEmailOrUsername(input);
+    setState(() => _emailOrUsernameError = result.isValid ? null : result.message);
   }
 
   void _onInputChanged() {
@@ -34,10 +51,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     authNotifier.clearError();
   }
 
+  bool _canLogin() {
+    final emailOrUsername = _emailOrUsernameController.text;
+    final password = _passwordController.text;
+
+    if (emailOrUsername.isEmpty || password.isEmpty) {
+      return false;
+    }
+
+    final credentialsValid =
+        AuthValidator.validateEmailOrUsername(emailOrUsername).isValid;
+    return credentialsValid;
+  }
+
   void _handleLogin() async {
+    if (!_canLogin()) {
+      return;
+    }
+
     final authNotifier = ref.read(authNotifierProvider.notifier);
     await authNotifier.login(
-      _emailController.text,
+      _emailOrUsernameController.text,
       _passwordController.text,
     );
 
@@ -64,11 +98,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const Icon(Icons.gamepad, size: 80, color: Color(0xFF00F5A0)),
             const SizedBox(height: 40),
             TextField(
-              controller: _emailController,
+              controller: _emailOrUsernameController,
               enabled: !authState.isLoading,
               decoration: InputDecoration(
-                labelText: l10n.translate('email'),
-                border: const OutlineInputBorder(),
+                labelText: 'Correo o usuario',
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color:
+                        _emailOrUsernameError != null ? Colors.red : Colors.grey,
+                  ),
+                ),
+                errorText: _emailOrUsernameError,
+                errorBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red),
+                ),
+                focusedErrorBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red, width: 2),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -110,11 +156,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: authState.isLoading ? null : _handleLogin,
+                onPressed:
+                    (authState.isLoading || !_canLogin()) ? null : _handleLogin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00F5A0),
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  disabledBackgroundColor: Colors.grey.withOpacity(0.3),
                 ),
                 child: authState.isLoading
                     ? const CircularProgressIndicator(color: Colors.black)

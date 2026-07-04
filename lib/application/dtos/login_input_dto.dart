@@ -1,12 +1,12 @@
 class LoginInputDTO {
-  final String email;
+  final String emailOrUsername;
   final String password;
 
   LoginInputDTO({
-    required this.email,
+    required this.emailOrUsername,
     required this.password,
   });
 
   @override
-  String toString() => 'LoginInputDTO(email: $email)';
+  String toString() => 'LoginInputDTO(emailOrUsername: $emailOrUsername)';
 }
