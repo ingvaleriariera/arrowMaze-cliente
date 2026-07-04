@@ -7,7 +7,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/auth/login_use_case
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/logout_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/register_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progress_use_case.dart';
-import 'package:arrow_maze_cliente_copy/infrastructure/exceptions/app_exceptions.dart';
+import 'package:arrow_maze_cliente_copy/domain/exceptions/app_exceptions.dart';
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final LoginUseCase loginUseCase;
@@ -48,18 +48,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException {
-      debugPrint('❌ AuthNotifier.login: Invalid credentials');
+    } on UnauthorizedException catch (e) {
+      debugPrint('❌ AuthNotifier.login: Invalid credentials - ${e.message}');
       state = state.copyWith(
         isLoading: false,
-        error: 'Credenciales inválidas. Verificá tu email y contraseña.',
+        error: e.message,
         isAuthenticated: false,
       );
     } catch (e) {
       debugPrint('❌ AuthNotifier.login: Login error - $e');
       state = state.copyWith(
         isLoading: false,
-        error: 'Ocurrió un error. Intentá de nuevo.',
+        error: 'Ocurrió un error. Intente de nuevo.',
         isAuthenticated: false,
       );
     }
@@ -91,11 +91,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException {
-      debugPrint('❌ AuthNotifier.register: Email or username already exists');
+    } on UnauthorizedException catch (e) {
+      debugPrint('❌ AuthNotifier.register: Email or username already exists - ${e.message}');
       state = state.copyWith(
         isLoading: false,
-        error: 'Email o usuario ya existe. Intentá con otros datos.',
+        error: e.message,
         isAuthenticated: false,
       );
     } catch (e) {

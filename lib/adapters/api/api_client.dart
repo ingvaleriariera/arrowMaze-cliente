@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:arrow_maze_cliente_copy/domain/exceptions/app_exceptions.dart';
 
 class ApiClient {
   final String baseUrl;
@@ -24,22 +25,45 @@ class ApiClient {
     _dio.interceptors.add(interceptor);
   }
 
+  Never _throwIfCustomException(DioException dioErr) {
+    if (dioErr.error is AppException) {
+      throw dioErr.error as AppException;
+    }
+    throw dioErr;
+  }
+
   Future<Map<String, dynamic>> get(String path, {Options? options}) async {
-    final response = await _dio.get(path, options: options);
-    return response.data as Map<String, dynamic>;
+    try {
+      final response = await _dio.get(path, options: options);
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      _throwIfCustomException(e);
+    }
   }
 
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
-    final response = await _dio.post(path, data: body);
-    return response.data as Map<String, dynamic>;
+    try {
+      final response = await _dio.post(path, data: body);
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      _throwIfCustomException(e);
+    }
   }
 
   Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) async {
-    final response = await _dio.put(path, data: body);
-    return response.data as Map<String, dynamic>;
+    try {
+      final response = await _dio.put(path, data: body);
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      _throwIfCustomException(e);
+    }
   }
 
   Future<void> delete(String path) async {
-    await _dio.delete(path);
+    try {
+      await _dio.delete(path);
+    } on DioException catch (e) {
+      _throwIfCustomException(e);
+    }
   }
 }
