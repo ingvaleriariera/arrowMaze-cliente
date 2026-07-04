@@ -59,6 +59,15 @@ class GameSession {
     return result;
   }
 
+  void deductMove() {
+    moves++;
+
+    // Check for defeat by moves after deducting move
+    if (moves >= maxMoves) {
+      _state = DefeatState(reason: 'OUT_OF_MOVES');
+    }
+  }
+
   void pause() {
     if (_state is PlayingState) {
       _state = PausedState();

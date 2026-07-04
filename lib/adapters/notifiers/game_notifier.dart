@@ -113,18 +113,26 @@ class GameNotifier extends StateNotifier<GameState> {
       debugPrint('   isActivatable=$isActivatable');
 
       if (!isActivatable) {
-        debugPrint('❌ GameNotifier: Arrow is BLOCKED, flashing red for 500ms');
+        debugPrint('❌ GameNotifier: Arrow is BLOCKED, deducting move');
+
+        // Deduct move even though arrow is blocked
+        state.session!.deductMove();
 
         // Start flash
         final newFlashMap = Map<String, FlashType>.from(state.flashMap);
         newFlashMap[arrowId] = FlashType.fail;
-        state = state.copyWith(flashMap: newFlashMap);
+        state = state.copyWith(flashMap: newFlashMap, session: state.session);
 
         // Remove flash after 500ms
         await Future.delayed(const Duration(milliseconds: 500));
         final updatedFlashMap = Map<String, FlashType>.from(state.flashMap);
         updatedFlashMap.remove(arrowId);
         state = state.copyWith(flashMap: updatedFlashMap);
+
+        // Check if game is over after deducting move
+        if (!state.session!.isPlaying()) {
+          debugPrint('🎯 GameNotifier: Game over after deducting move (blocked arrow attempt)');
+        }
 
         return; // Don't execute move
       }
