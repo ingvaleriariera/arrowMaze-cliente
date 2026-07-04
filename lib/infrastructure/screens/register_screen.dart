@@ -174,18 +174,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               enabled: !authState.isLoading,
               decoration: InputDecoration(
                 labelText: l10n.translate('password'),
-                border: OutlineInputBorder(
-                  borderSide: BorderSide(
-                    color: _passwordError != null ? Colors.red : Colors.grey,
-                  ),
-                ),
-                errorText: _passwordError,
-                errorBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.red),
-                ),
-                focusedErrorBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.red, width: 2),
-                ),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
