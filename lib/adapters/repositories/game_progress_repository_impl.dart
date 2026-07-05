@@ -79,7 +79,14 @@ class GameProgressRepositoryImpl implements IGameProgressRepository {
       // Parse response as progress (backend returns updated progress)
       // Pass userId to mapper since it's not in the response
       final syncedProgress = progressMapper.fromMap(responseJson, userId: userId);
-      
+
+      // The backend has no coin-earning economy yet (RF09) — its response
+      // never includes a real "coins" value, so the mapper always falls
+      // back to 0. Without this, every sync() call (which runs right
+      // after login, before the player ever reaches a level) would wipe
+      // out whatever coin balance the player already had locally.
+      syncedProgress.coins = localProgress?.coins ?? GameProgress(userId: userId).coins;
+
       // Save synced progress locally
       await save(syncedProgress);
       
