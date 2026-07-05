@@ -139,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               controller: _emailOrUsernameController,
               enabled: !authState.isLoading,
               decoration: InputDecoration(
-                labelText: 'Correo o usuario',
+                labelText: l10n.translate('email'),
                 border: OutlineInputBorder(
                   borderSide: BorderSide(
                     color:
