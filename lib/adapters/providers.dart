@@ -21,6 +21,9 @@ import 'package:arrow_maze_cliente_copy/adapters/state/settings_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/login_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/logout_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/register_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/auth/face_id_login_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/auth/face_id_login_with_email_use_case.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/services/biometric_service.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
@@ -36,7 +39,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progr
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
-  baseUrl: 'http://192.168.0.12:3000',
+  baseUrl: 'http://172.16.0.146:3000',
 ));
 
 // Mappers
@@ -63,6 +66,8 @@ final leaderboardRepositoryProvider = Provider((ref) => LeaderboardRepositoryImp
 ));
 
 final audioServiceProvider = Provider((ref) => AudioServiceImpl());
+
+final biometricServiceProvider = Provider((ref) => BiometricService());
 
 // In-memory cache of pre-generated boards, shared by LoadLevelUseCase
 // (consumer) and PreloadLevelsUseCase (producer). Kept alive for the app's
@@ -130,6 +135,16 @@ final logoutUseCaseProvider = Provider((ref) => LogoutUseCase(
   authRepository: ref.watch(authRepositoryProvider),
 ));
 
+final faceIdLoginUseCaseProvider = Provider((ref) => FaceIdLoginUseCase(
+  authRepository: ref.watch(authRepositoryProvider),
+  biometricService: ref.watch(biometricServiceProvider),
+));
+
+final faceIdLoginWithEmailUseCaseProvider = Provider((ref) => FaceIdLoginWithEmailUseCase(
+  authRepository: ref.watch(authRepositoryProvider),
+  biometricService: ref.watch(biometricServiceProvider),
+));
+
 // StateNotifiers
 final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref) =>
   GameNotifier(
@@ -151,6 +166,8 @@ final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref
     registerUseCase: ref.watch(registerUseCaseProvider),
     logoutUseCase: ref.watch(logoutUseCaseProvider),
     syncProgressUseCase: ref.watch(syncProgressUseCaseProvider),
+    faceIdLoginUseCase: ref.watch(faceIdLoginUseCaseProvider),
+    faceIdLoginWithEmailUseCase: ref.watch(faceIdLoginWithEmailUseCaseProvider),
   )
 );
 

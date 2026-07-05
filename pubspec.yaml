@@ -19,6 +19,7 @@ dependencies:
   go_router: ^14.0.0
   flutter_localizations:
     sdk: flutter
+  local_auth: ^2.1.0
 
 dev_dependencies:
   test: ^1.25.0

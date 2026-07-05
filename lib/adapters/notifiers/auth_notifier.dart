@@ -6,6 +6,8 @@ import 'package:arrow_maze_cliente_copy/application/dtos/register_input_dto.dart
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/login_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/logout_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/auth/register_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/auth/face_id_login_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/auth/face_id_login_with_email_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/exceptions/app_exceptions.dart';
 
@@ -14,12 +16,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final RegisterUseCase registerUseCase;
   final LogoutUseCase logoutUseCase;
   final SyncProgressUseCase syncProgressUseCase;
+  final FaceIdLoginUseCase faceIdLoginUseCase;
+  final FaceIdLoginWithEmailUseCase faceIdLoginWithEmailUseCase;
 
   AuthNotifier({
     required this.loginUseCase,
     required this.registerUseCase,
     required this.logoutUseCase,
     required this.syncProgressUseCase,
+    required this.faceIdLoginUseCase,
+    required this.faceIdLoginWithEmailUseCase,
   }) : super(const AuthState());
 
   Future<void> login(String emailOrUsername, String password) async {
@@ -60,6 +66,84 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: 'Ocurrió un error. Intente de nuevo.',
+        isAuthenticated: false,
+      );
+    }
+  }
+
+  Future<void> loginWithFaceId() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      debugPrint('🔐 AuthNotifier.loginWithFaceId: Attempting Face ID login');
+      final result = await faceIdLoginUseCase.execute();
+
+      debugPrint('✅ Face ID login successful, userId=${result.userId}');
+
+      state = state.copyWith(
+        isAuthenticated: true,
+        userId: result.userId,
+        isLoading: false,
+      );
+
+      debugPrint('🔄 AuthNotifier: Starting background sync');
+      try {
+        await syncProgressUseCase.execute(result.userId);
+        debugPrint('✅ AuthNotifier: Background sync completed successfully');
+      } catch (e) {
+        debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
+        debugPrint('   User still authenticated and can proceed');
+      }
+    } on UnauthorizedException catch (e) {
+      debugPrint('❌ AuthNotifier.loginWithFaceId: Face ID failed - ${e.message}');
+      state = state.copyWith(
+        isLoading: false,
+        error: e.message,
+        isAuthenticated: false,
+      );
+    } catch (e) {
+      debugPrint('❌ AuthNotifier.loginWithFaceId: Error - $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Ocurrió un error con Face ID. Intente de nuevo.',
+        isAuthenticated: false,
+      );
+    }
+  }
+
+  Future<void> loginWithFaceIdAndEmail(String email) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      debugPrint('🔐 AuthNotifier.loginWithFaceIdAndEmail: Attempting Face ID login for $email');
+      final result = await faceIdLoginWithEmailUseCase.execute(email);
+
+      debugPrint('✅ Face ID login successful for $email, userId=${result.userId}');
+
+      state = state.copyWith(
+        isAuthenticated: true,
+        userId: result.userId,
+        isLoading: false,
+      );
+
+      debugPrint('🔄 AuthNotifier: Starting background sync');
+      try {
+        await syncProgressUseCase.execute(result.userId);
+        debugPrint('✅ AuthNotifier: Background sync completed successfully');
+      } catch (e) {
+        debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
+        debugPrint('   User still authenticated and can proceed');
+      }
+    } on UnauthorizedException catch (e) {
+      debugPrint('❌ AuthNotifier.loginWithFaceIdAndEmail: Face ID failed - ${e.message}');
+      state = state.copyWith(
+        isLoading: false,
+        error: e.message,
+        isAuthenticated: false,
+      );
+    } catch (e) {
+      debugPrint('❌ AuthNotifier.loginWithFaceIdAndEmail: Error - $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Ocurrió un error con Face ID. Intente de nuevo.',
         isAuthenticated: false,
       );
     }

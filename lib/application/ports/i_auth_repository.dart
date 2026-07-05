@@ -23,4 +23,9 @@ abstract class IAuthRepository {
   Future<void> logout();
   Future<String?> getToken();
   Future<bool> isAuthenticated();
+
+  Future<void> saveBiometricCredentials(String email, String password);
+  Future<(String email, String password)?> getBiometricCredentials();
+  Future<bool> hasSavedBiometricCredentials();
+  Future<bool> hasSavedCredentialsForEmail(String email);
 }

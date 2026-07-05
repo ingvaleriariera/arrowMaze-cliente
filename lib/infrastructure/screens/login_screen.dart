@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
@@ -18,6 +19,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   String? _emailOrUsernameError;
   bool _showPassword = false;
+  bool _canUseFaceIdForEmail = false;
 
   @override
   void initState() {
@@ -39,12 +41,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     final input = _emailOrUsernameController.text;
     if (input.isEmpty) {
-      setState(() => _emailOrUsernameError = null);
+      setState(() {
+        _emailOrUsernameError = null;
+        _canUseFaceIdForEmail = false;
+      });
       return;
     }
 
     final result = AuthValidator.validateEmailOrUsername(input);
     setState(() => _emailOrUsernameError = result.isValid ? null : result.message);
+
+    if (result.isValid) {
+      _checkFaceIdForEmail(input);
+    }
+  }
+
+  Future<void> _checkFaceIdForEmail(String email) async {
+    try {
+      final faceIdLoginWithEmailUseCase = ref.read(faceIdLoginWithEmailUseCaseProvider);
+      final canUse = await faceIdLoginWithEmailUseCase.canUseFaceIdForEmail(email);
+      debugPrint('📱 LoginScreen: Face ID available for $email = $canUse');
+      if (mounted) {
+        setState(() => _canUseFaceIdForEmail = canUse);
+      }
+    } catch (e) {
+      debugPrint('❌ LoginScreen._checkFaceIdForEmail: Error - $e');
+    }
   }
 
   void _onInputChanged() {
@@ -75,6 +97,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _emailOrUsernameController.text,
       _passwordController.text,
     );
+
+    if (mounted) {
+      final isAuthenticated = ref.read(authNotifierProvider).isAuthenticated;
+      if (isAuthenticated) {
+        context.go('/levels');
+      }
+    }
+  }
+
+  void _handleFaceIdLoginWithEmail() async {
+    final email = _emailOrUsernameController.text.trim();
+    if (email.isEmpty) return;
+
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    await authNotifier.loginWithFaceIdAndEmail(email);
 
     if (mounted) {
       final isAuthenticated = ref.read(authNotifierProvider).isAuthenticated;
@@ -135,7 +172,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: (_emailOrUsernameController.text.isNotEmpty &&
+                            _canUseFaceIdForEmail &&
+                            !authState.isLoading)
+                        ? _handleFaceIdLoginWithEmail
+                        : null,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Identificación biométrica',
+                          style: TextStyle(
+                            color: _emailOrUsernameController.text.isNotEmpty &&
+                                    _canUseFaceIdForEmail &&
+                                    !authState.isLoading
+                                ? Colors.blue
+                                : Colors.grey,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.face,
+                          color: _emailOrUsernameController.text.isNotEmpty &&
+                                  _canUseFaceIdForEmail &&
+                                  !authState.isLoading
+                              ? Colors.blue
+                              : Colors.grey,
+                          size: 28,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             if (authState.error != null)
               Container(
                 padding: const EdgeInsets.all(12),
