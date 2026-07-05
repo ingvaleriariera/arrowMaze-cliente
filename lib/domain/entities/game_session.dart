@@ -90,7 +90,21 @@ class GameSession {
   }
 
   PowerUpResult applyPowerUp(PowerUp powerUp) {
-    return powerUp.use(board);
+    final result = powerUp.use(board);
+
+    // Hammer/Magnet remove arrows directly on the board, bypassing
+    // executeMove() — without redoing its post-move checks here, clearing
+    // the board (or deadlocking it) via a power-up would never transition
+    // out of PlayingState.
+    if (result.success) {
+      if (board.isEmpty()) {
+        _state = VictoryState();
+      } else if (board.getActivatableArrows().isEmpty) {
+        _state = DefeatState(reason: 'DEADLOCK');
+      }
+    }
+
+    return result;
   }
 
   bool isOver() => _state.isOver();

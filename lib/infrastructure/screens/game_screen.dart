@@ -6,13 +6,20 @@ import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/game_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/grid_power_up.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/hammer_power_up.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/hint_power_up.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/magnet_power_up.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/power_up_bar.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
   final String levelId;
@@ -49,16 +56,43 @@ class _PendingExit {
   });
 }
 
+/// A Hammer power-up smash in flight, snapshotted before the arrow was
+/// removed from the board — same pattern as [_PendingExit], different
+/// (in-place shrink/fade instead of slide-off) visual.
+class _PendingSmash {
+  final List<Position> cells;
+  final Direction direction;
+  final String color;
+  final AnimationController controller;
+
+  _PendingSmash({
+    required this.cells,
+    required this.direction,
+    required this.color,
+    required this.controller,
+  });
+}
+
 class _GameScreenState extends ConsumerState<GameScreen>
     with TickerProviderStateMixin {
   bool _showPause = false;
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
+  final Map<String, _PendingSmash> _pendingSmashes = {};
 
   // Music/vibration are presentation-only toggles for now — no backing
   // service exists yet (sound reuses the already-wired SettingsNotifier).
   bool _musicEnabled = true;
   bool _vibrationEnabled = true;
+
+  // Power-up UI state. `_pendingPowerUp` is non-null while waiting for the
+  // player to tap a target arrow (currently only 'HAMMER' needs this —
+  // Hint/Grid/Magnet act immediately on purchase).
+  String? _pendingPowerUp;
+  String? _hintArrowId;
+  AnimationController? _hintController;
+  double _gridOverlayOpacity = 0;
+  AnimationController? _gridController;
 
   int get _levelNumber {
     if (widget.levelNumber != null) return widget.levelNumber!;
@@ -91,13 +125,37 @@ class _GameScreenState extends ConsumerState<GameScreen>
     for (final exit in _pendingExits.values) {
       exit.controller.dispose();
     }
+    for (final smash in _pendingSmashes.values) {
+      smash.controller.dispose();
+    }
+    _hintController?.dispose();
+    _gridController?.dispose();
     super.dispose();
   }
 
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
+    _resetPowerUpUiState();
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
     gameNotifier.loadLevel(widget.levelId, _currentUserId());
+  }
+
+  /// Clears any power-up UI state left over from the previous level (or
+  /// attempt) — without this, a Hammer targeting-mode left active, or a
+  /// hint/grid overlay animation still running, would bleed into the next
+  /// level load/restart.
+  void _resetPowerUpUiState() {
+    _pendingPowerUp = null;
+    _hintController?.dispose();
+    _hintController = null;
+    _hintArrowId = null;
+    _gridController?.dispose();
+    _gridController = null;
+    _gridOverlayOpacity = 0;
+    for (final smash in _pendingSmashes.values) {
+      smash.controller.dispose();
+    }
+    _pendingSmashes.clear();
   }
 
   // GameNotifier saves completion progress keyed by this id, and
@@ -144,6 +202,155 @@ class _GameScreenState extends ConsumerState<GameScreen>
         progress: eased,
       );
     }).toList();
+  }
+
+  /// Hammer power-up: shrink-and-fade the struck arrow in place. [arrow]
+  /// must be snapshotted by the caller before usePowerUp() runs — by the
+  /// time that Future resolves, the arrow is already gone from
+  /// `board.arrows`.
+  void _startSmashAnimation(Arrow arrow) {
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    final smash = _PendingSmash(
+      cells: arrow.segments.map((s) => s.position).toList(),
+      direction: arrow.getDirection(),
+      color: arrow.color.value,
+      controller: controller,
+    );
+    _pendingSmashes[arrow.id] = smash;
+
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _pendingSmashes.remove(arrow.id));
+        controller.dispose();
+      }
+    });
+    controller.forward();
+  }
+
+  List<SmashingArrowAnim> _buildSmashingAnimList() {
+    return _pendingSmashes.values.map((smash) {
+      return SmashingArrowAnim(
+        cells: smash.cells,
+        direction: smash.direction,
+        color: smash.color,
+        progress: Curves.easeIn.transform(smash.controller.value),
+      );
+    }).toList();
+  }
+
+  /// Hint power-up: pulse [arrowId]'s glow for a few seconds, then clear.
+  void _startHintAnimation(String arrowId) {
+    _hintController?.dispose();
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    )..repeat(reverse: true);
+    _hintController = controller;
+    setState(() => _hintArrowId = arrowId);
+    controller.addListener(() => setState(() {}));
+
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (!mounted || _hintController != controller) return;
+      controller.stop();
+      controller.dispose();
+      setState(() {
+        _hintArrowId = null;
+        _hintController = null;
+      });
+    });
+  }
+
+  /// Grid power-up: fade the exit-direction lines in, hold, then fade out.
+  void _startGridOverlayAnimation() {
+    _gridController?.dispose();
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    );
+    _gridController = controller;
+    controller.addListener(() {
+      final t = controller.value;
+      setState(() {
+        if (t < 0.15) {
+          _gridOverlayOpacity = t / 0.15;
+        } else if (t < 0.7) {
+          _gridOverlayOpacity = 1.0;
+        } else {
+          _gridOverlayOpacity = (1 - (t - 0.7) / 0.3).clamp(0.0, 1.0);
+        }
+      });
+    });
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller.dispose();
+        if (_gridController == controller) {
+          setState(() {
+            _gridOverlayOpacity = 0;
+            _gridController = null;
+          });
+        }
+      }
+    });
+    controller.forward();
+  }
+
+  void _handlePowerUpResult(PowerUpResult? result) {
+    if (result != null && !result.success && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result.message)));
+    }
+  }
+
+  /// Reacts to a power-up purchase confirmed in [PowerUpBar]'s info sheet.
+  /// Hint/Grid/Magnet take effect immediately; Hammer instead arms
+  /// target-selection mode — its actual usePowerUp() call happens from
+  /// the board's onTapDown once a target is chosen.
+  Future<void> _onPowerUpSelected(
+    String type,
+    GameNotifier gameNotifier,
+    Board board,
+    Set<String> activatableSet,
+  ) async {
+    switch (type) {
+      case 'HINT':
+        final result = await gameNotifier.usePowerUp(HintPowerUp());
+        _handlePowerUpResult(result);
+        if (result != null && result.success && result.affectedArrowIds.isNotEmpty) {
+          _startHintAnimation(result.affectedArrowIds.first);
+        }
+        break;
+      case 'GRID':
+        final result = await gameNotifier.usePowerUp(GridPowerUp());
+        _handlePowerUpResult(result);
+        if (result != null && result.success) {
+          _startGridOverlayAnimation();
+        }
+        break;
+      case 'MAGNET':
+        // Snapshot every currently activatable arrow before usePowerUp()
+        // mutates the board — afterwards, only the ids it actually picked
+        // (affectedArrowIds) are still worth animating.
+        final snapshots = <String, Arrow>{
+          for (final id in activatableSet)
+            if (board.arrows[id] != null) id: board.arrows[id]!,
+        };
+        final result = await gameNotifier.usePowerUp(MagnetPowerUp());
+        _handlePowerUpResult(result);
+        if (result != null && result.success) {
+          for (final id in result.affectedArrowIds) {
+            final arrow = snapshots[id];
+            if (arrow != null) _startExitAnimation(arrow, board.shape);
+          }
+        }
+        break;
+      case 'HAMMER':
+        setState(() => _pendingPowerUp = 'HAMMER');
+        break;
+    }
   }
 
   @override
@@ -272,16 +479,34 @@ class _GameScreenState extends ConsumerState<GameScreen>
                             debugPrint('🖱️ Tap at ($gridX, $gridY)');
 
                             final arrowId = board.grid['$gridX,$gridY'];
-                            if (arrowId != null) {
-                              debugPrint('🎯 Arrow tapped: $arrowId');
-                              if (activatableSet.contains(arrowId)) {
-                                final arrow = board.arrows[arrowId];
-                                if (arrow != null) {
-                                  _startExitAnimation(arrow, shape);
+                            if (arrowId == null) return;
+                            debugPrint('🎯 Arrow tapped: $arrowId');
+
+                            // Hammer targeting mode: any arrow can be the
+                            // target, blocked or not — that's the whole
+                            // point of the hammer, unlike a normal tap.
+                            if (_pendingPowerUp == 'HAMMER') {
+                              final arrow = board.arrows[arrowId];
+                              setState(() => _pendingPowerUp = null);
+                              if (arrow == null) return;
+                              gameNotifier
+                                  .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
+                                  .then((result) {
+                                _handlePowerUpResult(result);
+                                if (result != null && result.success) {
+                                  _startSmashAnimation(arrow);
                                 }
-                              }
-                              gameNotifier.activateArrow(arrowId);
+                              });
+                              return;
                             }
+
+                            if (activatableSet.contains(arrowId)) {
+                              final arrow = board.arrows[arrowId];
+                              if (arrow != null) {
+                                _startExitAnimation(arrow, shape);
+                              }
+                            }
+                            gameNotifier.activateArrow(arrowId);
                           },
                           child: CustomPaint(
                             painter: BoardPainter(
@@ -292,6 +517,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               minY: minY,
                               flashMap: gameState.flashMap,
                               exitingArrows: _buildExitingAnimList(),
+                              highlightArrowId: _hintArrowId,
+                              highlightPulse: _hintController?.value ?? 0,
+                              gridOverlayOpacity: _gridOverlayOpacity,
+                              smashingArrows: _buildSmashingAnimList(),
                             ),
                             size: Size(gridWidth, gridHeight),
                           ),
@@ -302,42 +531,45 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 },
               ),
             ),
-            // Controls
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: const Color(0xFF1a1a2e),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00F5A0),
-                      foregroundColor: Colors.black,
-                    ),
-                    child: const Text('Hint'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00F5A0),
-                      foregroundColor: Colors.black,
-                    ),
-                    child: const Text('Hammer'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00F5A0),
-                      foregroundColor: Colors.black,
-                    ),
-                    child: const Text('Magnet'),
-                  ),
-                ],
-              ),
+            PowerUpBar(
+              coins: gameState.progress?.coins ?? 0,
+              pendingType: _pendingPowerUp,
+              onSelect: (type) =>
+                  _onPowerUpSelected(type, gameNotifier, board, activatableSet),
             ),
           ],
         ),
+        // Hammer targeting banner
+        if (_pendingPowerUp == 'HAMMER')
+          Positioned(
+            top: 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Toca una flecha para destruirla',
+                        style: TextStyle(color: Colors.white)),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => setState(() => _pendingPowerUp = null),
+                      child: const Text('Cancelar',
+                          style: TextStyle(
+                              color: Color(0xFFFF3366),
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         // Pause overlay
         if (_showPause) _buildPauseOverlay(gameNotifier),
       ],
@@ -397,7 +629,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: () {
-                    setState(() => _showPause = false);
+                    setState(() {
+                      _showPause = false;
+                      _resetPowerUpUiState();
+                    });
                     gameNotifier.restart(widget.levelId, _currentUserId());
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),

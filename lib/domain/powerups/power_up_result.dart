@@ -1,19 +1,20 @@
 class PowerUpResult {
   final bool success;
   final String message;
-  final String? affectedArrowId;
+  final List<String> affectedArrowIds;
 
   PowerUpResult({
     required this.success,
     required this.message,
-    this.affectedArrowId,
+    this.affectedArrowIds = const [],
   });
 
-  static PowerUpResult applySuccess(String message, {String? affectedArrowId}) =>
+  static PowerUpResult applySuccess(String message,
+          {List<String> affectedArrowIds = const []}) =>
       PowerUpResult(
         success: true,
         message: message,
-        affectedArrowId: affectedArrowId,
+        affectedArrowIds: affectedArrowIds,
       );
 
   static PowerUpResult applyFailure(String message) =>

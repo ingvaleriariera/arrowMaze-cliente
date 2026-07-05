@@ -8,7 +8,10 @@ class GameProgress {
     required this.userId,
     List<String>? completedLevels,
     Map<String, int>? bestScores,
-    this.coins = 0,
+    // TODO: no real coin-earning economy exists yet (RF09). Defaulting new
+    // players to a high balance so power-ups are free to test end-to-end;
+    // revert to 0 once players can actually earn coins through gameplay.
+    this.coins = 9999,
   })
       : completedLevels = completedLevels ?? [],
         bestScores = bestScores ?? {};

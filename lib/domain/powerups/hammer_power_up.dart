@@ -26,12 +26,12 @@ class HammerPowerUp extends PowerUp {
     apply(board);
     return PowerUpResult.applySuccess(
       'Arrow destroyed with hammer',
-      affectedArrowId: targetArrowId,
+      affectedArrowIds: [targetArrowId],
     );
   }
 
   @override
-  int getCost() => 30;
+  int getCost() => 100;
 
   @override
   String getType() => 'HAMMER';

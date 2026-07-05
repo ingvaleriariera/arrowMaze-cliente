@@ -13,6 +13,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
+import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/victory_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
@@ -144,25 +145,7 @@ class GameNotifier extends StateNotifier<GameState> {
       if (result.success) {
         debugPrint('✅ GameNotifier: Move executed successfully');
         state = state.copyWith(session: state.session);
-
-        if (state.session!.state is VictoryState ||
-            state.session!.state is DefeatState) {
-          _stopTimer();
-
-          if (state.session!.state is VictoryState) {
-            // This is what actually unlocks the next level — without
-            // recording the completion here, GetLevelSummariesUseCase
-            // never sees this level as done and the next one stays locked.
-            final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);
-            progress.recordCompletion(state.session!.levelId, state.session!.score);
-            debugPrint('🏆 GameNotifier: Recorded completion of ${state.session!.levelId} (score: ${state.session!.score})');
-            state = state.copyWith(progress: progress);
-          }
-
-          if (state.progress != null) {
-            await saveProgressUseCase.execute(state.progress!);
-          }
-        }
+        await _handleSessionOverIfNeeded();
       } else {
         // This shouldn't happen if isActivatable check passed
         debugPrint('❌ GameNotifier: Move failed unexpectedly');
@@ -182,11 +165,11 @@ class GameNotifier extends StateNotifier<GameState> {
     }
   }
 
-  Future<void> usePowerUp(PowerUp powerUp) async {
-    if (state.session == null || state.progress == null) return;
+  Future<PowerUpResult?> usePowerUp(PowerUp powerUp) async {
+    if (state.session == null || state.progress == null) return null;
 
     try {
-      await usePowerUpUseCase.execute(
+      final result = await usePowerUpUseCase.execute(
         state.session!,
         powerUp,
         state.progress!,
@@ -195,8 +178,35 @@ class GameNotifier extends StateNotifier<GameState> {
         session: state.session,
         progress: state.progress,
       );
+      if (result.success) {
+        await _handleSessionOverIfNeeded();
+      }
+      return result;
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      return null;
+    }
+  }
+
+  /// Shared victory/defeat post-processing for anything that can end the
+  /// game — a normal move (activateArrow) or a power-up that empties or
+  /// deadlocks the board (Hammer/Magnet). Stops the timer, records level
+  /// completion (this is what actually unlocks the next level), and
+  /// persists progress.
+  Future<void> _handleSessionOverIfNeeded() async {
+    if (state.session!.state is VictoryState || state.session!.state is DefeatState) {
+      _stopTimer();
+
+      if (state.session!.state is VictoryState) {
+        final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);
+        progress.recordCompletion(state.session!.levelId, state.session!.score);
+        debugPrint('🏆 GameNotifier: Recorded completion of ${state.session!.levelId} (score: ${state.session!.score})');
+        state = state.copyWith(progress: progress);
+      }
+
+      if (state.progress != null) {
+        await saveProgressUseCase.execute(state.progress!);
+      }
     }
   }
 

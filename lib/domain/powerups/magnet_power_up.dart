@@ -1,37 +1,39 @@
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
-import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 
 class MagnetPowerUp extends PowerUp {
-  final Direction direction;
-
-  MagnetPowerUp({required this.direction});
+  static const int maxArrowsRemoved = 5;
 
   @override
-  bool canApply(Board board) {
-    final activatable = board.getActivatableArrows();
-    return activatable.any((arrowId) {
-      final arrow = board.arrows[arrowId];
-      return arrow != null && arrow.getDirection() == direction;
-    });
-  }
+  bool canApply(Board board) => board.getActivatableArrows().isNotEmpty;
+
+  List<String> _targets(Board board) =>
+      board.getActivatableArrows().take(maxArrowsRemoved).toList();
 
   @override
   void apply(Board board) {
-    final activatable = board.getActivatableArrows();
-    final toRemove = <String>[
-      for (final arrowId in activatable)
-        if (board.arrows[arrowId]?.getDirection() == direction) arrowId
-    ];
-
-    for (final arrowId in toRemove) {
+    for (final arrowId in _targets(board)) {
       board.removeArrow(arrowId);
     }
   }
 
   @override
-  int getCost() => 20;
+  PowerUpResult use(Board board) {
+    if (!canApply(board)) {
+      return PowerUpResult.applyFailure('No activatable arrows available');
+    }
+
+    final targets = _targets(board);
+    apply(board);
+    return PowerUpResult.applySuccess(
+      'Removed ${targets.length} arrow(s) with magnet',
+      affectedArrowIds: targets,
+    );
+  }
+
+  @override
+  int getCost() => 500;
 
   @override
   String getType() => 'MAGNET';

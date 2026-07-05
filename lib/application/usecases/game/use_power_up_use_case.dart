@@ -24,8 +24,10 @@ class UsePowerUpUseCase {
       return PowerUpResult.applyFailure('Not enough coins');
     }
 
-    // Apply the power-up
-    final result = powerUp.use(session.board);
+    // Apply the power-up via the session (not powerUp.use(session.board)
+    // directly) so a board cleared/deadlocked by it also transitions
+    // GameSession out of PlayingState, same as a normal move would.
+    final result = session.applyPowerUp(powerUp);
 
     // Only persist and play sound if application was successful
     if (result.success) {

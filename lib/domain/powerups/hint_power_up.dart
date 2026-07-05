@@ -23,12 +23,12 @@ class HintPowerUp extends PowerUp {
     apply(board);
     return PowerUpResult.applySuccess(
       'Hint revealed',
-      affectedArrowId: hint,
+      affectedArrowIds: [hint!],
     );
   }
 
   @override
-  int getCost() => 10;
+  int getCost() => 100;
 
   @override
   String getType() => 'HINT';

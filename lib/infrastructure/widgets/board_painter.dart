@@ -16,6 +16,20 @@ class BoardPainter extends CustomPainter {
   final int minY;
   final List<ExitingArrowAnim>? exitingArrows;
 
+  /// Hint power-up: which arrow to pulse, and how bright the pulse is
+  /// right now (0..1, driven by a repeating AnimationController).
+  final String? highlightArrowId;
+  final double highlightPulse;
+
+  /// Grid power-up: 0 when hidden, otherwise the fade in/out opacity of
+  /// the exit-direction lines drawn from every arrow's head.
+  final double gridOverlayOpacity;
+
+  /// Hammer power-up: arrows currently mid-smash (shrinking + fading out
+  /// in place, plus an impact burst), snapshotted before they were
+  /// removed from [board].
+  final List<SmashingArrowAnim>? smashingArrows;
+
   BoardPainter({
     required this.board,
     required this.activatableArrows,
@@ -24,6 +38,10 @@ class BoardPainter extends CustomPainter {
     required this.minY,
     required this.flashMap,
     this.exitingArrows,
+    this.highlightArrowId,
+    this.highlightPulse = 0,
+    this.gridOverlayOpacity = 0,
+    this.smashingArrows,
   });
 
   @override
@@ -54,9 +72,21 @@ class BoardPainter extends CustomPainter {
       // All arrows are bright - blocked arrows show red flash when tapped
       final alpha = 1.0;
       final flashType = flashMap[arrow.id];
+      final glowBoost = arrow.id == highlightArrowId ? highlightPulse : 0.0;
 
-      _drawArrow(canvas, arrow, color, alpha, flashType);
+      _drawArrow(canvas, arrow, color, alpha, flashType, glowBoost: glowBoost);
     }
+
+    // 3a. Hint power-up: a bright ring around the suggested arrow's head —
+    // the glowBoost above is too subtle on its own against a busy board.
+    _drawHintRing(canvas);
+
+    // 3b. Grid power-up: a line from every arrow's head to where it would
+    // exit, reusing the same distanceToExit() the exit animation uses.
+    _drawExitLines(canvas);
+
+    // 3c. Hammer power-up: arrows mid-smash, snapshotted before removal.
+    _drawSmashingArrows(canvas);
 
     // 4. Draw exiting arrows sliding off the board along their exit
     // direction, the whole snake moving together (head leaves first, tail
@@ -113,7 +143,7 @@ class BoardPainter extends CustomPainter {
   }
 
   void _drawArrow(Canvas canvas, Arrow arrow, Color color, double alpha,
-      FlashType? flash) {
+      FlashType? flash, {double glowBoost = 0}) {
     final cellCenters = arrow.segments.map((segment) {
       final x = segment.position.x - minX;
       final y = segment.position.y - minY;
@@ -121,11 +151,12 @@ class BoardPainter extends CustomPainter {
     }).toList();
 
     _drawArrowAtOffsets(canvas, cellCenters, arrow.getDirection(), color,
-        alpha, flash);
+        alpha, flash, glowBoost: glowBoost);
   }
 
   void _drawArrowAtOffsets(Canvas canvas, List<Offset> cellCenters,
-      Direction direction, Color color, double alpha, FlashType? flash) {
+      Direction direction, Color color, double alpha, FlashType? flash,
+      {double glowBoost = 0}) {
     final col = flash == FlashType.ok
         ? const Color(0xFF00F5A0)
         : flash == FlashType.fail
@@ -138,13 +169,19 @@ class BoardPainter extends CustomPainter {
     final hw = bw * 3.2;
     final hl = bw * 4.2;
 
+    // Hint power-up: brighten and widen the existing glow pass instead of
+    // drawing a separate highlight effect — glowBoost is 0 for every
+    // arrow except the one currently being hinted.
+    final glowBlur = (flash != null ? 24.0 : 12.0) + glowBoost * 20.0;
+    final glowAlpha = (alpha * (0.6 + glowBoost * 0.4)).clamp(0.0, 1.0);
+
     if (cellCenters.length == 1) {
       final c = cellCenters[0];
       final startX = c.dx - direction.dx * cellSize * 0.28;
       final startY = c.dy - direction.dy * cellSize * 0.28;
       final path = Path()..moveTo(startX, startY)..lineTo(c.dx, c.dy);
 
-      _drawGradientPath(canvas, path, col, alpha, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
       _drawHead(canvas, c.dx, c.dy, direction, hw, hl, col, alpha);
     } else {
@@ -175,7 +212,7 @@ class BoardPainter extends CustomPainter {
       final last = cellCenters.last;
       path.lineTo(last.dx, last.dy);
 
-      _drawGradientPath(canvas, path, col, alpha, bw, flash != null ? 24 : 12);
+      _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
       _drawHead(canvas, last.dx, last.dy, direction, hw, hl, col, alpha);
     }
@@ -247,6 +284,121 @@ class BoardPainter extends CustomPainter {
     }
   }
 
+  /// Hint power-up: a pulsing gold ring around the suggested arrow's head,
+  /// unmistakable regardless of the arrow's own color — unlike the
+  /// glowBoost passed into _drawArrow (a small brightness/blur bump on an
+  /// already-present glow layer), this is a dedicated highlight that
+  /// can't be confused with normal rendering.
+  void _drawHintRing(Canvas canvas) {
+    final id = highlightArrowId;
+    if (id == null) return;
+    final arrow = board.arrows[id];
+    if (arrow == null) return;
+
+    final head = arrow.getHead().position;
+    final cx = (head.x - minX) * cellSize + cellSize / 2;
+    final cy = (head.y - minY) * cellSize + cellSize / 2;
+
+    final radius = cellSize * (0.55 + 0.15 * highlightPulse);
+    final paint = Paint()
+      ..color = const Color(0xFFFFD700)
+          .withAlpha((140 + 100 * highlightPulse).round())
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = max(2.0, cellSize * 0.07);
+
+    canvas.drawCircle(Offset(cx, cy), radius, paint);
+  }
+
+  /// Grid power-up: a thin line from each arrow's head to the cell where
+  /// it would exit, [board.shape.distanceToExit] — the same distance the
+  /// exit animation already uses to know how far an arrow travels off
+  /// the board.
+  void _drawExitLines(Canvas canvas) {
+    if (gridOverlayOpacity <= 0) return;
+
+    for (final arrow in board.arrows.values) {
+      final color = Color(
+        int.parse(arrow.color.value.replaceFirst('#', ''), radix: 16) |
+            0xFF000000,
+      );
+      final head = arrow.getHead().position;
+      final direction = arrow.getDirection();
+      final distance = board.shape.distanceToExit(head, direction);
+      if (distance <= 0) continue;
+
+      final startX = (head.x - minX) * cellSize +
+          cellSize / 2 +
+          direction.dx * cellSize * 0.3;
+      final startY = (head.y - minY) * cellSize +
+          cellSize / 2 +
+          direction.dy * cellSize * 0.3;
+      final endX = startX + direction.dx * cellSize * distance;
+      final endY = startY + direction.dy * cellSize * distance;
+
+      final paint = Paint()
+        ..color = color.withAlpha((gridOverlayOpacity * 200).round())
+        ..strokeWidth = max(1.5, cellSize * 0.04)
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), paint);
+    }
+  }
+
+  /// Hammer power-up: shrinks and fades each smashing arrow in place
+  /// (rather than sliding it off the board like a normal exit), plus a
+  /// small impact burst at its head.
+  void _drawSmashingArrows(Canvas canvas) {
+    final smashing = smashingArrows;
+    if (smashing == null) return;
+
+    for (final smash in smashing) {
+      final color = Color(
+        int.parse(smash.color.replaceFirst('#', ''), radix: 16) |
+            0xFF000000,
+      );
+      final cellCenters = smash.cells.map((pos) {
+        final x = pos.x - minX;
+        final y = pos.y - minY;
+        return Offset(
+            x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
+      }).toList();
+
+      final scale = (1 - smash.progress).clamp(0.0, 1.0);
+      if (scale <= 0) continue;
+
+      final centroid = cellCenters.reduce((a, b) => a + b) /
+          cellCenters.length.toDouble();
+
+      canvas.save();
+      canvas.translate(centroid.dx, centroid.dy);
+      canvas.scale(scale);
+      canvas.translate(-centroid.dx, -centroid.dy);
+      _drawArrowAtOffsets(
+          canvas, cellCenters, smash.direction, color, scale, null);
+      canvas.restore();
+
+      _drawImpactBurst(canvas, cellCenters.last, color, smash.progress);
+    }
+  }
+
+  void _drawImpactBurst(
+      Canvas canvas, Offset center, Color color, double progress) {
+    const rays = 6;
+    final maxLen = cellSize * 0.9;
+    final len = maxLen * progress;
+    final alpha = (1 - progress).clamp(0.0, 1.0);
+    final paint = Paint()
+      ..color = color.withAlpha((alpha * 255).round())
+      ..strokeWidth = max(1.5, cellSize * 0.05)
+      ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i < rays; i++) {
+      final angle = 2 * pi * i / rays;
+      final offset = Offset(cos(angle) * len, sin(angle) * len);
+      canvas.drawLine(center, center + offset, paint);
+    }
+  }
+
   void _drawHead(Canvas canvas, double hx, double hy, Direction vec,
       double hw, double hl, Color col, double alpha) {
     final tx = hx + vec.dx * hl * 0.65;
@@ -275,7 +427,11 @@ class BoardPainter extends CustomPainter {
   bool shouldRepaint(BoardPainter oldDelegate) {
     return oldDelegate.flashMap != flashMap ||
         oldDelegate.exitingArrows != exitingArrows ||
-        oldDelegate.board != board;
+        oldDelegate.board != board ||
+        oldDelegate.highlightArrowId != highlightArrowId ||
+        oldDelegate.highlightPulse != highlightPulse ||
+        oldDelegate.gridOverlayOpacity != gridOverlayOpacity ||
+        oldDelegate.smashingArrows != smashingArrows;
   }
 }
 
@@ -294,6 +450,23 @@ class ExitingArrowAnim {
     required this.direction,
     required this.color,
     required this.edgeDistance,
+    required this.progress,
+  });
+}
+
+/// A snapshot of an arrow mid-smash (Hammer power-up), taken before it was
+/// removed from the board. [progress] is 0..1 over the smash's lifetime —
+/// 0 at full size, 1 fully shrunk/faded away.
+class SmashingArrowAnim {
+  final List<Position> cells;
+  final Direction direction;
+  final String color;
+  final double progress;
+
+  SmashingArrowAnim({
+    required this.cells,
+    required this.direction,
+    required this.color,
     required this.progress,
   });
 }
