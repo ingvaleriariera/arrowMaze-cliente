@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/api/api_client.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/level_mapper.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/progress_mapper.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/config/api_config.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/auth_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/game_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/leaderboard_notifier.dart';
@@ -39,7 +40,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progr
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
-  baseUrl: 'http://172.16.0.146:3000',
+  baseUrl: ApiConfig.apiBaseUrl,
 ));
 
 // Mappers
