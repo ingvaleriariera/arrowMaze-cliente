@@ -28,6 +28,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
     final token = json['token'] as String;
     final userId = json['userId'] as String;
+    final username = json['username'] as String;
 
     debugPrint('🔐 AuthRepository.login: Guardando token y userId');
     await secureStorage.write(key: _tokenKey, value: token);
@@ -43,7 +44,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
     apiClient.setToken(token);
 
-    return AuthResultDTO(token: token, userId: userId);
+    return AuthResultDTO(token: token, userId: userId, username: username);
   }
 
   @override
@@ -57,6 +58,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
     final token = json['token'] as String;
     final userId = json['userId'] as String;
+    final responseUsername = json['username'] as String;
 
     debugPrint('📝 AuthRepository.register: Guardando token y userId');
     await secureStorage.write(key: _tokenKey, value: token);
@@ -72,7 +74,7 @@ class AuthRepositoryImpl implements IAuthRepository {
 
     apiClient.setToken(token);
 
-    return AuthResultDTO(token: token, userId: userId);
+    return AuthResultDTO(token: token, userId: userId, username: responseUsername);
   }
 
   @override

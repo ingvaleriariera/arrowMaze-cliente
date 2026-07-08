@@ -46,28 +46,18 @@ class GameProgressRepositoryImpl implements IGameProgressRepository {
       final localProgress = await get(userId);
       debugPrint('📝 Local progress: ${localProgress?.completedLevels.length ?? 0} completed levels, coins: ${localProgress?.coins ?? 0}');
 
-      // Build request body in the exact format backend expects
-      final List<Map<String, dynamic>> levelsList = [];
-      
-      if (localProgress != null) {
-        // Map each bestScore entry to the expected format
-        for (final entry in localProgress.bestScores.entries) {
-          levelsList.add({
-            'levelId': entry.key,
-            'bestScore': entry.value,
-            'completedAt': DateTime.now().toIso8601String(),
-          });
-        }
-        debugPrint('📝 Mapped ${levelsList.length} levels to sync format');
-      } else {
-        debugPrint('📝 No local progress - sending empty levels array');
-      }
+      // Delegate to the mapper (single source of truth for the wire
+      // format, also used to parse the response below) rather than
+      // rebuilding the payload by hand here. When there's no local
+      // progress yet, deliberately send no `coins` at all — GameProgress's
+      // default (9999, a temporary dev-testing value — see game_progress
+      // .dart) must never be sent as if it were a real balance, and
+      // omitting the key entirely tells the backend to leave whatever
+      // balance it already has untouched.
+      final requestBody = localProgress != null
+          ? progressMapper.toMap(localProgress)
+          : {'levels': <Map<String, dynamic>>[]};
 
-      // Always include "levels" key, even if empty
-      final requestBody = {
-        'levels': levelsList,
-      };
-      
       debugPrint('📤 Syncing to backend via POST /api/v1/progress/sync');
       debugPrint('   Request body: $requestBody');
 
@@ -76,16 +66,20 @@ class GameProgressRepositoryImpl implements IGameProgressRepository {
       
       debugPrint('📥 Backend response received: $responseJson');
       
-      // Parse response as progress (backend returns updated progress)
-      // Pass userId to mapper since it's not in the response
+      // Parse response as progress (backend returns updated progress).
+      // Pass userId to mapper since it's not in the response. The backend
+      // now actually persists coins (see PlayerProgress.setCoins on the
+      // server) and always returns the real balance, so we trust it
+      // directly instead of overriding it with the local value.
       final syncedProgress = progressMapper.fromMap(responseJson, userId: userId);
 
-      // The backend has no coin-earning economy yet (RF09) — its response
-      // never includes a real "coins" value, so the mapper always falls
-      // back to 0. Without this, every sync() call (which runs right
-      // after login, before the player ever reaches a level) would wipe
-      // out whatever coin balance the player already had locally.
-      syncedProgress.coins = localProgress?.coins ?? GameProgress(userId: userId).coins;
+      // avatarEmoji never goes through the backend at all (see GameProgress
+      // — local-only by design), so fromMap() always hands back the
+      // default. Carry over whatever was already chosen locally, or every
+      // sync() call would silently reset the player's avatar.
+      if (localProgress != null) {
+        syncedProgress.avatarEmoji = localProgress.avatarEmoji;
+      }
 
       // Save synced progress locally
       await save(syncedProgress);

@@ -66,6 +66,7 @@ class ProgressMapper {
 
     return {
       'levels': levelsList,
+      'coins': progress.coins,
     };
   }
 }

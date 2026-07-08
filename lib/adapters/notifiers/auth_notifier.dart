@@ -36,11 +36,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final result = await loginUseCase.execute(input);
       
       debugPrint('✅ Login successful, userId=${result.userId}');
-      
+
       // Update auth state immediately - don't wait for sync
       state = state.copyWith(
         isAuthenticated: true,
         userId: result.userId,
+        username: result.username,
         isLoading: false,
       );
 
@@ -82,6 +83,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isAuthenticated: true,
         userId: result.userId,
+        username: result.username,
         isLoading: false,
       );
 
@@ -121,6 +123,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isAuthenticated: true,
         userId: result.userId,
+        username: result.username,
         isLoading: false,
       );
 
@@ -162,6 +165,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isAuthenticated: true,
         userId: result.userId,
+        username: result.username,
         isLoading: false,
       );
 

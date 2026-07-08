@@ -13,6 +13,7 @@ import 'package:arrow_maze_cliente_copy/adapters/repositories/audio_service_impl
 import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/in_memory_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/leaderboard_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/score_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/level_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/auth_state.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
@@ -34,6 +35,8 @@ import 'package:arrow_maze_cliente_copy/application/usecases/game/restart_level_
 import 'package:arrow_maze_cliente_copy/application/usecases/game/resume_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/leaderboard/get_leaderboard_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/score/submit_score_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/leaderboard/get_global_leaderboard_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progress_use_case.dart';
@@ -63,6 +66,10 @@ final authRepositoryProvider = Provider((ref) => AuthRepositoryImpl(
 ));
 
 final leaderboardRepositoryProvider = Provider((ref) => LeaderboardRepositoryImpl(
+  apiClient: ref.watch(apiClientProvider),
+));
+
+final scoreRepositoryProvider = Provider((ref) => ScoreRepositoryImpl(
   apiClient: ref.watch(apiClientProvider),
 ));
 
@@ -124,6 +131,14 @@ final getLeaderboardUseCaseProvider = Provider((ref) => GetLeaderboardUseCase(
   leaderboardRepository: ref.watch(leaderboardRepositoryProvider),
 ));
 
+final getGlobalLeaderboardUseCaseProvider = Provider((ref) => GetGlobalLeaderboardUseCase(
+  leaderboardRepository: ref.watch(leaderboardRepositoryProvider),
+));
+
+final submitScoreUseCaseProvider = Provider((ref) => SubmitScoreUseCase(
+  scoreRepository: ref.watch(scoreRepositoryProvider),
+));
+
 final loginUseCaseProvider = Provider((ref) => LoginUseCase(
   authRepository: ref.watch(authRepositoryProvider),
 ));
@@ -158,6 +173,7 @@ final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref
     saveProgressUseCase: ref.watch(saveProgressUseCaseProvider),
     getLocalProgressUseCase: ref.watch(getLocalProgressUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
+    submitScoreUseCase: ref.watch(submitScoreUseCaseProvider),
   )
 );
 
@@ -182,6 +198,7 @@ final levelSelectNotifierProvider = StateNotifierProvider<LevelSelectNotifier, L
 final leaderboardNotifierProvider = StateNotifierProvider<LeaderboardNotifier, LeaderboardState>((ref) =>
   LeaderboardNotifier(
     getLeaderboardUseCase: ref.watch(getLeaderboardUseCaseProvider),
+    getGlobalLeaderboardUseCase: ref.watch(getGlobalLeaderboardUseCaseProvider),
   )
 );
 

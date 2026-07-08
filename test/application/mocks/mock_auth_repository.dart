@@ -16,7 +16,7 @@ class MockAuthRepository implements IAuthRepository {
       _token = 'mock_token_${email}_${DateTime.now().millisecondsSinceEpoch}';
       _userId = 'user_${email.hashCode}';
       _isLoggedIn = true;
-      return AuthResultDTO(token: _token!, userId: _userId!);
+      return AuthResultDTO(token: _token!, userId: _userId!, username: email);
     }
     throw Exception('Invalid credentials');
   }
@@ -30,7 +30,7 @@ class MockAuthRepository implements IAuthRepository {
     _token = 'mock_token_${email}_${DateTime.now().millisecondsSinceEpoch}';
     _userId = 'user_${email.hashCode}';
     _isLoggedIn = true;
-    return AuthResultDTO(token: _token!, userId: _userId!);
+    return AuthResultDTO(token: _token!, userId: _userId!, username: username);
   }
 
   @override
