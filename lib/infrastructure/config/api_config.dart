@@ -1,10 +1,23 @@
 /// Centralizada configuración de API para la capa de infraestructura.
 ///
-/// Actualiza [apiBaseUrl] aquí cuando la IP del backend cambia.
-/// Ejemplo: de '192.168.0.3' a '172.16.0.146' según la red WiFi.
+/// [apiBaseUrl] NUNCA debe hardcodearse aquí con una IP personal — cada
+/// vez que alguien del equipo prueba en su propio teléfono y comitea ese
+/// cambio, pisa la IP de quien lo hizo antes (ya pasó más de una vez).
+/// En vez de eso, se lee de una variable de entorno de compilación:
+///
+///   flutter run --dart-define-from-file=local.env.json
+///
+/// donde `local.env.json` (gitignored, ver local.env.json.example) tiene:
+///   { "API_BASE_URL": "http://TU_IP_LOCAL:3000" }
+///
+/// Sin ese archivo, cae en el default de abajo (sirve para el simulador
+/// de iOS, que sí puede usar localhost).
 class ApiConfig {
   /// URL base del servidor NestJS backend
-  static const String apiBaseUrl = 'http://192.168.0.3:3000';
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:3000',
+  );
 
   /// Puerto del servidor API
   static const int apiPort = 3000;
