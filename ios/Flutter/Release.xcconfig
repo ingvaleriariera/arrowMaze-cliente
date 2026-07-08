@@ -1,2 +1,11 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
+
+// Shared default — every teammate builds with this unless they override
+// it below in their own gitignored Local.xcconfig.
+APP_BUNDLE_IDENTIFIER = com.example.arrowMazeClienteCopy
+
+// Per-developer overrides (DEVELOPMENT_TEAM, APP_BUNDLE_IDENTIFIER, etc.)
+// live in Local.xcconfig, which is gitignored — never in this shared file.
+// Included last so it wins over the shared default above.
+#include? "Local.xcconfig"
