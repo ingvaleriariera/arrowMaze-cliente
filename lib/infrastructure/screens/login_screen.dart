@@ -101,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (mounted) {
       final isAuthenticated = ref.read(authNotifierProvider).isAuthenticated;
       if (isAuthenticated) {
-        context.go('/levels');
+        context.go('/home');
       }
     }
   }
@@ -116,7 +116,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (mounted) {
       final isAuthenticated = ref.read(authNotifierProvider).isAuthenticated;
       if (isAuthenticated) {
-        context.go('/levels');
+        context.go('/home');
       }
     }
   }

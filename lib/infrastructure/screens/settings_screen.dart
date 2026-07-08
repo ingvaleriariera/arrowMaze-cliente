@@ -19,9 +19,22 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         children: [
           SwitchListTile(
-            title: const Text('Mute Sound'),
-            value: settingsState.isMuted,
+            secondary: const Icon(Icons.volume_up, color: Color(0xFF00F5A0)),
+            title: Text(l10n.translate('sound')),
+            value: !settingsState.isMuted,
             onChanged: (_) => settingsNotifier.toggleMute(),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.music_note, color: Color(0xFF00F5A0)),
+            title: Text(l10n.translate('music')),
+            value: settingsState.musicEnabled,
+            onChanged: (_) => settingsNotifier.toggleMusic(),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.vibration, color: Color(0xFF00F5A0)),
+            title: Text(l10n.translate('vibration')),
+            value: settingsState.vibrationEnabled,
+            onChanged: (_) => settingsNotifier.toggleVibration(),
           ),
           ListTile(
             title: const Text('Language'),

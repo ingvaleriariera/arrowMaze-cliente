@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/splash_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/login_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/register_screen.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/screens/home_screen.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/screens/profile_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/level_select_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/game_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/victory_screen.dart';
@@ -25,6 +27,14 @@ class AppRouter {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/home',
+        builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: '/levels',

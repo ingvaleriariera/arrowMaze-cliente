@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/bottom_tab_bar.dart';
 
 /// Only ask once per account whether to preload every level's board.
 /// Scoped by userId so logging into a different account gets asked again.
@@ -79,38 +80,17 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final levelSelectState = ref.watch(levelSelectNotifierProvider);
-    final authNotifier = ref.read(authNotifierProvider.notifier);
 
     debugPrint('🎨 LevelSelectScreen.build: isLoading=${levelSelectState.isLoading}, levels=${levelSelectState.levels.length}');
 
     return Stack(
       children: [
         Scaffold(
-          appBar: AppBar(
-            title: Text(l10n.translate('levelSelect')),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.leaderboard),
-                onPressed: levelSelectState.levels.isEmpty
-                    ? null
-                    : () => context.go('/leaderboard/${levelSelectState.levels.first.levelId}'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () => context.go('/settings'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  await authNotifier.logout();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                },
-              ),
-            ],
-          ),
+          appBar: AppBar(title: Text(l10n.translate('levelSelect'))),
           body: _buildBody(context, levelSelectState),
+          // Settings/leaderboard/logout live only on Home now — Levels is
+          // reachable straight from the tab bar, no need to duplicate them.
+          bottomNavigationBar: const BottomTabBar(active: AppTab.levels),
         ),
         // Full-screen blocking overlay while every level's board is being
         // generated. Without this, tapping a level whose board hasn't
@@ -174,7 +154,7 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
                   // GameScreen.initState triggers the actual load for this levelId,
                   // so just navigate here to avoid a duplicate loadLevel() call.
                   debugPrint('   → Navigating to /game/${level.levelId}');
-                  context.go(
+                  context.push(
                     '/game/${level.levelId}',
                     extra: {
                       'difficulty': level.difficulty,

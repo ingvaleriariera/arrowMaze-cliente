@@ -80,11 +80,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
   final Map<String, _PendingExit> _pendingExits = {};
   final Map<String, _PendingSmash> _pendingSmashes = {};
 
-  // Music/vibration are presentation-only toggles for now — no backing
-  // service exists yet (sound reuses the already-wired SettingsNotifier).
-  bool _musicEnabled = true;
-  bool _vibrationEnabled = true;
-
   // Power-up UI state. `_pendingPowerUp` is non-null while waiting for the
   // player to tap a target arrow (currently only 'HAMMER' needs this —
   // Hint/Grid/Magnet act immediately on purchase).
@@ -605,14 +600,14 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 SwitchListTile(
                   secondary: const Icon(Icons.music_note, color: Color(0xFF00F5A0)),
                   title: Text(l10n.translate('music')),
-                  value: _musicEnabled,
-                  onChanged: (value) => setState(() => _musicEnabled = value),
+                  value: settingsState.musicEnabled,
+                  onChanged: (_) => settingsNotifier.toggleMusic(),
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.vibration, color: Color(0xFF00F5A0)),
                   title: Text(l10n.translate('vibration')),
-                  value: _vibrationEnabled,
-                  onChanged: (value) => setState(() => _vibrationEnabled = value),
+                  value: settingsState.vibrationEnabled,
+                  onChanged: (_) => settingsNotifier.toggleVibration(),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(

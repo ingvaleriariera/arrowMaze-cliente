@@ -11,6 +11,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/game/resume_level_u
 import 'package:arrow_maze_cliente_copy/application/usecases/game/use_power_up_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/score/submit_score_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
@@ -28,6 +29,7 @@ class GameNotifier extends StateNotifier<GameState> {
   final SaveProgressUseCase saveProgressUseCase;
   final GetLocalProgressUseCase getLocalProgressUseCase;
   final PreloadLevelsUseCase preloadLevelsUseCase;
+  final SubmitScoreUseCase submitScoreUseCase;
 
   Timer? _timer;
   String? _userId;
@@ -42,6 +44,7 @@ class GameNotifier extends StateNotifier<GameState> {
     required this.saveProgressUseCase,
     required this.getLocalProgressUseCase,
     required this.preloadLevelsUseCase,
+    required this.submitScoreUseCase,
   }) : super(const GameState());
 
   Future<void> loadLevel(String levelId, String userId) async {
@@ -202,6 +205,20 @@ class GameNotifier extends StateNotifier<GameState> {
         progress.recordCompletion(state.session!.levelId, state.session!.score);
         debugPrint('🏆 GameNotifier: Recorded completion of ${state.session!.levelId} (score: ${state.session!.score})');
         state = state.copyWith(progress: progress);
+
+        // Feeds the per-level leaderboard (score_entries on the backend) —
+        // separate from progress/sync below, which only feeds PlayerProgress
+        // (used for the global leaderboard). A failure here shouldn't block
+        // the victory screen, same reasoning as the background progress sync
+        // in AuthNotifier.
+        if (_userId != null) {
+          try {
+            await submitScoreUseCase.execute(_userId!, state.session!.levelId, state.session!.score);
+            debugPrint('🏆 GameNotifier: Score submitted to leaderboard');
+          } catch (e) {
+            debugPrint('⚠️  GameNotifier: Score submission failed (non-blocking) - $e');
+          }
+        }
       }
 
       if (state.progress != null) {

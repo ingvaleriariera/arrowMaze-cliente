@@ -110,7 +110,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (mounted) {
       final isAuthenticated = ref.read(authNotifierProvider).isAuthenticated;
       if (isAuthenticated) {
-        context.go('/levels');
+        context.go('/home');
       }
     }
   }
