@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
@@ -119,6 +120,9 @@ class GameNotifier extends StateNotifier<GameState> {
       if (!isActivatable) {
         debugPrint('❌ GameNotifier: Arrow is BLOCKED, deducting move');
 
+        // Haptic feedback for blocked arrow
+        await HapticFeedback.mediumImpact();
+
         // Deduct move even though arrow is blocked
         state.session!.failedMoves++;
         state.session!.deductMove();
@@ -146,6 +150,9 @@ class GameNotifier extends StateNotifier<GameState> {
       final hasVoidReentry = state.session!.board.graph.hasVoidReentry(arrowId, state.session!.board.arrows, state.session!.board.grid, state.session!.board.shape);
       if (hasVoidReentry) {
         debugPrint('❌ GameNotifier: Arrow is BLOCKED by void re-entry, deducting move');
+
+        // Haptic feedback for blocked arrow
+        await HapticFeedback.mediumImpact();
 
         // Deduct move even though arrow is blocked
         state.session!.failedMoves++;
@@ -230,6 +237,13 @@ class GameNotifier extends StateNotifier<GameState> {
       _stopTimer();
 
       if (state.session!.state is VictoryState) {
+        // Haptic feedback for level completed (three strong impacts)
+        await HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 100));
+        await HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 100));
+        await HapticFeedback.heavyImpact();
+
         state.session!.calculateFinalScore();
         final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);
         progress.recordCompletion(state.session!.levelId, state.session!.score);
