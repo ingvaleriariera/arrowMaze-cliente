@@ -31,6 +31,7 @@ class GameNotifier extends StateNotifier<GameState> {
   final GetLocalProgressUseCase getLocalProgressUseCase;
   final PreloadLevelsUseCase preloadLevelsUseCase;
   final SubmitScoreUseCase submitScoreUseCase;
+  final bool Function() getVibrationEnabled;
 
   Timer? _timer;
   String? _userId;
@@ -46,7 +47,18 @@ class GameNotifier extends StateNotifier<GameState> {
     required this.getLocalProgressUseCase,
     required this.preloadLevelsUseCase,
     required this.submitScoreUseCase,
+    required this.getVibrationEnabled,
   }) : super(const GameState());
+
+  Future<void> _triggerHaptic(Future<void> Function() hapticCall) async {
+    try {
+      if (getVibrationEnabled()) {
+        await hapticCall();
+      }
+    } catch (e) {
+      debugPrint('⚠️  GameNotifier: Haptic feedback failed - $e');
+    }
+  }
 
   Future<void> loadLevel(String levelId, String userId) async {
     debugPrint('🎮 GameNotifier.loadLevel called with: $levelId');
@@ -121,7 +133,7 @@ class GameNotifier extends StateNotifier<GameState> {
         debugPrint('❌ GameNotifier: Arrow is BLOCKED, deducting move');
 
         // Haptic feedback for blocked arrow
-        await HapticFeedback.mediumImpact();
+        await _triggerHaptic(() => HapticFeedback.mediumImpact());
 
         // Deduct move even though arrow is blocked
         state.session!.failedMoves++;
@@ -152,7 +164,7 @@ class GameNotifier extends StateNotifier<GameState> {
         debugPrint('❌ GameNotifier: Arrow is BLOCKED by void re-entry, deducting move');
 
         // Haptic feedback for blocked arrow
-        await HapticFeedback.mediumImpact();
+        await _triggerHaptic(() => HapticFeedback.mediumImpact());
 
         // Deduct move even though arrow is blocked
         state.session!.failedMoves++;
@@ -238,11 +250,11 @@ class GameNotifier extends StateNotifier<GameState> {
 
       if (state.session!.state is VictoryState) {
         // Haptic feedback for level completed (three strong impacts)
-        await HapticFeedback.heavyImpact();
+        await _triggerHaptic(() => HapticFeedback.heavyImpact());
         await Future.delayed(const Duration(milliseconds: 100));
-        await HapticFeedback.heavyImpact();
+        await _triggerHaptic(() => HapticFeedback.heavyImpact());
         await Future.delayed(const Duration(milliseconds: 100));
-        await HapticFeedback.heavyImpact();
+        await _triggerHaptic(() => HapticFeedback.heavyImpact());
 
         state.session!.calculateFinalScore();
         final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);

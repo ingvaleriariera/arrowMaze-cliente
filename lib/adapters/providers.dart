@@ -174,6 +174,7 @@ final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref
     getLocalProgressUseCase: ref.watch(getLocalProgressUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
     submitScoreUseCase: ref.watch(submitScoreUseCaseProvider),
+    getVibrationEnabled: () => ref.read(settingsNotifierProvider).vibrationEnabled,
   )
 );
 
