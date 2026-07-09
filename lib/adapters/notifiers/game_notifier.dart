@@ -120,6 +120,7 @@ class GameNotifier extends StateNotifier<GameState> {
         debugPrint('❌ GameNotifier: Arrow is BLOCKED, deducting move');
 
         // Deduct move even though arrow is blocked
+        state.session!.failedMoves++;
         state.session!.deductMove();
 
         // Start flash
@@ -201,6 +202,7 @@ class GameNotifier extends StateNotifier<GameState> {
       _stopTimer();
 
       if (state.session!.state is VictoryState) {
+        state.session!.calculateFinalScore();
         final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);
         progress.recordCompletion(state.session!.levelId, state.session!.score);
         debugPrint('🏆 GameNotifier: Recorded completion of ${state.session!.levelId} (score: ${state.session!.score})');

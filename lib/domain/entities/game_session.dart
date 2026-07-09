@@ -12,7 +12,9 @@ class GameSession {
   final Board board;
   final String levelId;
   final int maxMoves;
+  final int maxScore;
   int moves = 0;
+  int failedMoves = 0;
   int score = 0;
   int? timeRemaining;
 
@@ -23,7 +25,8 @@ class GameSession {
     required this.levelId,
     required this.maxMoves,
     this.timeRemaining,
-  }) : _state = PlayingState();
+  }) : maxScore = ((board.arrows.values.fold<int>(0, (sum, arrow) => sum + (arrow.segments.length * 10)) + 50) ~/ 100) * 100,
+       _state = PlayingState();
 
   IGameState get state => _state;
 
@@ -53,6 +56,7 @@ class GameSession {
       }
     } else {
       // Failed move
+      failedMoves++;
       score = (score - 5).clamp(0, 999999);
     }
 
@@ -105,6 +109,16 @@ class GameSession {
     }
 
     return result;
+  }
+
+  void calculateFinalScore() {
+    if (_state is! VictoryState) return;
+    if (failedMoves == 0) {
+      score = maxScore;
+    } else {
+      final movesRemaining = maxMoves - moves;
+      score = (maxScore * movesRemaining ~/ maxMoves).clamp(0, maxScore);
+    }
   }
 
   bool isOver() => _state.isOver();
