@@ -10,7 +10,6 @@ import 'package:arrow_maze_cliente_copy/adapters/notifiers/level_select_notifier
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/settings_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/auth_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/audio_service_impl.dart';
-import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_database.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/in_memory_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/leaderboard_repository_impl.dart';
@@ -60,7 +59,6 @@ final levelRepositoryProvider = Provider((ref) => LevelRepositoryImpl(
 final gameProgressRepositoryProvider = Provider((ref) => GameProgressRepositoryImpl(
   apiClient: ref.watch(apiClientProvider),
   progressMapper: ref.watch(progressMapperProvider),
-  database: ref.watch(gameProgressDatabaseProvider),
 ));
 
 final authRepositoryProvider = Provider((ref) => AuthRepositoryImpl(
@@ -78,8 +76,6 @@ final scoreRepositoryProvider = Provider((ref) => ScoreRepositoryImpl(
 final audioServiceProvider = Provider((ref) => AudioServiceImpl());
 
 final biometricServiceProvider = Provider((ref) => BiometricService());
-
-final gameProgressDatabaseProvider = Provider((ref) => GameProgressDatabase());
 
 // In-memory cache of pre-generated boards, shared by LoadLevelUseCase
 // (consumer) and PreloadLevelsUseCase (producer). Kept alive for the app's
