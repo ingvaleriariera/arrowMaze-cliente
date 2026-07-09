@@ -495,7 +495,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               return;
                             }
 
-                            if (activatableSet.contains(arrowId)) {
+                            if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
                               final arrow = board.arrows[arrowId];
                               if (arrow != null) {
                                 _startExitAnimation(arrow, shape);

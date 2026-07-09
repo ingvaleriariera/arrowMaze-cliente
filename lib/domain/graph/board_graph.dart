@@ -48,6 +48,24 @@ class BoardGraph {
 
         position = nextPos;
       }
+      bool foundVoid = false;
+      var position2 = arrow.getHead().position;
+      final allCells = shape.getCells();
+      late int maxX, maxY;
+      if (allCells.isNotEmpty) {
+        maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
+        maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
+      } else {
+        maxX = 100;
+        maxY = 100;
+      }
+      while (true) {
+        final nextPos2 = position2.translate(direction);
+        if (nextPos2.x < 0 || nextPos2.y < 0 || nextPos2.x > maxX || nextPos2.y > maxY) break;
+        if (!shape.contains(nextPos2)) { foundVoid = true; }
+        else if (foundVoid && shape.contains(nextPos2)) { nodes[arrow.id]!.blockedByVoidReentry = true; break; }
+        position2 = nextPos2;
+      }
     }
 
     // DEBUG: Print collision info
@@ -79,6 +97,34 @@ class BoardGraph {
 
   bool isActivatable(String arrowId) =>
       nodes[arrowId]?.isActivatable() ?? false;
+
+  bool hasVoidReentry(String arrowId, Map<String, Arrow> arrows, Map<String, String> grid, BoardShape shape) {
+    final arrow = arrows[arrowId];
+    if (arrow == null) return false;
+    final direction = arrow.getDirection();
+    var position = arrow.getHead().position;
+    bool foundVoid = false;
+    final allCells = shape.getCells();
+    late int maxX, maxY;
+    if (allCells.isNotEmpty) {
+      maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
+      maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
+    } else {
+      maxX = 100;
+      maxY = 100;
+    }
+    while (true) {
+      final nextPos = position.translate(direction);
+      if (nextPos.x < 0 || nextPos.y < 0 || nextPos.x > maxX || nextPos.y > maxY) break;
+      if (!shape.contains(nextPos)) { foundVoid = true; }
+      else if (foundVoid && shape.contains(nextPos)) {
+        final occupiedBy = grid[nextPos.toKey()];
+        if (occupiedBy != null && occupiedBy != arrowId) { return true; }
+      }
+      position = nextPos;
+    }
+    return false;
+  }
 
   int size() => nodes.length;
 

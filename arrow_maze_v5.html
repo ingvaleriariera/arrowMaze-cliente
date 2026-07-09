@@ -155,6 +155,21 @@ const DIAMOND_SHAPE=[
 // Ambas condiciones significan EXIT.
 // ═══════════════════════════════════════════════════════════
 
+function hasVoidReentry(arrowId,cols,rows,boardSet,grid){
+  const a=state.arrows[arrowId]; if(!a)return false;
+  let foundVoid=false;
+  let cx=a.head.x+a.vec.dx, cy=a.head.y+a.vec.dy;
+  while(cx>=0&&cy>=0&&cx<cols&&cy<rows){
+    if(boardSet&&!boardSet.has(`${cx},${cy}`)){foundVoid=true;}
+    else if(foundVoid&&boardSet&&boardSet.has(`${cx},${cy}`)){
+      const cell=grid[cy]?.[cx];
+      if(cell&&cell.type==='ARROW'&&cell.arrowId!==arrowId){return true;}
+    }
+    cx+=a.vec.dx; cy+=a.vec.dy;
+  }
+  return false;
+}
+
 function buildGraph(arrows,grid,cols,rows,boardSet){
   const graph={};
   Object.values(arrows).forEach(a=>{graph[a.id]={blockedBy:new Set()};});
@@ -366,11 +381,13 @@ function initState(lvl,n){
 function tryMove(arrowId){
   if(state.gameState!=='PLAYING')return null;
   const arrow=state.arrows[arrowId]; if(!arrow)return null;
-  state.moves+=1;
   const node=state.graph[arrowId];
+  const isBlocked=node&&(node.blockedBy.size>0||hasVoidReentry(arrowId,state.cols,state.rows,state.boardSet,state.grid));
+  if(isBlocked)return{type:'FAIL',arrowId,cells:arrow.cells};
+  state.moves+=1;
   const isActivatable=node&&node.blockedBy.size===0;
   let result;
-  if(isActivatable){
+  if(isActivatable&&!hasVoidReentry(arrowId,state.cols,state.rows,state.boardSet,state.grid)){
     const snapshot={cells:arrow.cells.map(c=>({...c})),vec:arrow.vec,color:arrow.color};
     removeArrowFromState(arrowId);
     state.score+=10*snapshot.cells.length;

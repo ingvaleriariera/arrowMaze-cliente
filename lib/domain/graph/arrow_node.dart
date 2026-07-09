@@ -1,8 +1,9 @@
 class ArrowNode {
   final String arrowId;
   final Set<String> blockedBy;
+  bool blockedByVoidReentry;
 
-  ArrowNode({required this.arrowId, required this.blockedBy});
+  ArrowNode({required this.arrowId, required this.blockedBy, this.blockedByVoidReentry = false});
 
   bool isActivatable() => blockedBy.isEmpty;
 

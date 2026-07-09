@@ -9,6 +9,10 @@ class PlayingState implements IGameState {
       return MoveResult.exitFailure(arrowId);
     }
 
+    if (board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
+      return MoveResult.exitFailure(arrowId);
+    }
+
     final arrow = board.arrows[arrowId];
     if (arrow == null) {
       return MoveResult.exitFailure(arrowId);
