@@ -363,6 +363,27 @@ class BoardBuilder {
     return 1;
   }
 
+  bool _hasDeadlockPattern(Position head, Direction direction, Map<String, String> grid) {
+    final oppositeDir = direction.opposite();
+    var pos = head.translate(direction);
+    while (pos.x >= 0 && pos.y >= 0 && pos.x < 100 && pos.y < 100) {
+      if (!_shape.contains(pos)) {
+        pos = pos.translate(direction);
+        continue;
+      }
+      final occupiedBy = grid[pos.toKey()];
+      if (occupiedBy != null) {
+        final otherArrow = _arrows[occupiedBy];
+        if (otherArrow != null && otherArrow.getDirection() == oppositeDir) {
+          return true;
+        }
+        return false;
+      }
+      pos = pos.translate(direction);
+    }
+    return false;
+  }
+
   Map<String, dynamic>? _findActivatableArrow(
       Set<String> remaining, Map<String, String> grid, bool allowLong) {
     for (int attempt = 0; attempt < 300; attempt++) {
@@ -388,7 +409,7 @@ class BoardBuilder {
         // be approved with an exit vector that immediately re-enters its
         // own body — that arrow would be permanently unsolvable.
         final activatable = _isActivatable(head, vec, grid, ownCells: ownCells);
-        if (activatable) {
+        if (activatable && !_hasDeadlockPattern(head, vec, grid)) {
           return {
             'cells': path,
             'direction': vec,
