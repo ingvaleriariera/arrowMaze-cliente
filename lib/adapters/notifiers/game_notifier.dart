@@ -142,6 +142,34 @@ class GameNotifier extends StateNotifier<GameState> {
         return; // Don't execute move
       }
 
+      // CHECK FOR VOID RE-ENTRY: Even if activatable, check if blocked by void re-entry
+      final hasVoidReentry = state.session!.board.graph.hasVoidReentry(arrowId, state.session!.board.arrows, state.session!.board.grid, state.session!.board.shape);
+      if (hasVoidReentry) {
+        debugPrint('❌ GameNotifier: Arrow is BLOCKED by void re-entry, deducting move');
+
+        // Deduct move even though arrow is blocked
+        state.session!.failedMoves++;
+        state.session!.deductMove();
+
+        // Start flash
+        final newFlashMap = Map<String, FlashType>.from(state.flashMap);
+        newFlashMap[arrowId] = FlashType.fail;
+        state = state.copyWith(flashMap: newFlashMap, session: state.session);
+
+        // Remove flash after 500ms
+        await Future.delayed(const Duration(milliseconds: 500));
+        final updatedFlashMap = Map<String, FlashType>.from(state.flashMap);
+        updatedFlashMap.remove(arrowId);
+        state = state.copyWith(flashMap: updatedFlashMap);
+
+        // Check if game is over after deducting move
+        if (!state.session!.isPlaying()) {
+          debugPrint('🎯 GameNotifier: Game over after deducting move (void re-entry attempt)');
+        }
+
+        return; // Don't execute move
+      }
+
       // Arrow is activatable, execute the move
       debugPrint('✅ GameNotifier: Arrow is activatable, executing move');
       final result = await activateArrowUseCase.execute(state.session!, arrowId);
