@@ -516,11 +516,9 @@ class BoardBuilder {
 
   ArrowColor _getColorForIndex(int index) {
     const colors = [
-      '#00f5a0', '#0088ff', '#ff3366', '#ffb800',
-      '#cc44ff', '#ff6600', '#00ddff', '#ff44aa',
-      '#aaff00', '#ff4444', '#44ffcc', '#ff8844',
-      '#4488ff', '#ffdd00', '#ff44ff', '#44ff88',
-      '#ff6644', '#44aaff',
+      '#00f5a0', '#0088ff', '#ffb800', '#cc44ff',
+      '#00ddff', '#aaff00', '#44ffcc', '#ff8844',
+      '#4488ff', '#ffdd00', '#44ff88', '#44aaff',
     ];
     return ArrowColor.fromHex(colors[index % colors.length]);
   }
