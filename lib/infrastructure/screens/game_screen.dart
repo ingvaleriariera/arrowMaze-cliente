@@ -463,61 +463,67 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
                   return Container(
                     color: const Color(0xFF0d0d18),
-                    child: Center(
-                      child: SizedBox(
-                        width: gridWidth,
-                        height: gridHeight,
-                        child: GestureDetector(
-                          onTapDown: (details) {
-                            final gridX = (details.localPosition.dx / cellSize).floor() + minX;
-                            final gridY = (details.localPosition.dy / cellSize).floor() + minY;
-                            debugPrint('🖱️ Tap at ($gridX, $gridY)');
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 3.0,
+                      boundaryMargin: const EdgeInsets.all(100),
+                      constrained: false,
+                      child: Center(
+                        child: SizedBox(
+                          width: gridWidth,
+                          height: gridHeight,
+                          child: GestureDetector(
+                            onTapDown: (details) {
+                              final gridX = (details.localPosition.dx / cellSize).floor() + minX;
+                              final gridY = (details.localPosition.dy / cellSize).floor() + minY;
+                              debugPrint('🖱️ Tap at ($gridX, $gridY)');
 
-                            final arrowId = board.grid['$gridX,$gridY'];
-                            if (arrowId == null) return;
-                            debugPrint('🎯 Arrow tapped: $arrowId');
+                              final arrowId = board.grid['$gridX,$gridY'];
+                              if (arrowId == null) return;
+                              debugPrint('🎯 Arrow tapped: $arrowId');
 
-                            // Hammer targeting mode: any arrow can be the
-                            // target, blocked or not — that's the whole
-                            // point of the hammer, unlike a normal tap.
-                            if (_pendingPowerUp == 'HAMMER') {
-                              final arrow = board.arrows[arrowId];
-                              setState(() => _pendingPowerUp = null);
-                              if (arrow == null) return;
-                              gameNotifier
-                                  .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
-                                  .then((result) {
-                                _handlePowerUpResult(result);
-                                if (result != null && result.success) {
-                                  _startSmashAnimation(arrow);
-                                }
-                              });
-                              return;
-                            }
-
-                            if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
-                              final arrow = board.arrows[arrowId];
-                              if (arrow != null) {
-                                _startExitAnimation(arrow, shape);
+                              // Hammer targeting mode: any arrow can be the
+                              // target, blocked or not — that's the whole
+                              // point of the hammer, unlike a normal tap.
+                              if (_pendingPowerUp == 'HAMMER') {
+                                final arrow = board.arrows[arrowId];
+                                setState(() => _pendingPowerUp = null);
+                                if (arrow == null) return;
+                                gameNotifier
+                                    .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
+                                    .then((result) {
+                                  _handlePowerUpResult(result);
+                                  if (result != null && result.success) {
+                                    _startSmashAnimation(arrow);
+                                  }
+                                });
+                                return;
                               }
-                            }
-                            gameNotifier.activateArrow(arrowId);
-                          },
-                          child: CustomPaint(
-                            painter: BoardPainter(
-                              board: board,
-                              activatableArrows: activatableSet,
-                              cellSize: cellSize,
-                              minX: minX,
-                              minY: minY,
-                              flashMap: gameState.flashMap,
-                              exitingArrows: _buildExitingAnimList(),
-                              highlightArrowId: _hintArrowId,
-                              highlightPulse: _hintController?.value ?? 0,
-                              gridOverlayOpacity: _gridOverlayOpacity,
-                              smashingArrows: _buildSmashingAnimList(),
+
+                              if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
+                                final arrow = board.arrows[arrowId];
+                                if (arrow != null) {
+                                  _startExitAnimation(arrow, shape);
+                                }
+                              }
+                              gameNotifier.activateArrow(arrowId);
+                            },
+                            child: CustomPaint(
+                              painter: BoardPainter(
+                                board: board,
+                                activatableArrows: activatableSet,
+                                cellSize: cellSize,
+                                minX: minX,
+                                minY: minY,
+                                flashMap: gameState.flashMap,
+                                exitingArrows: _buildExitingAnimList(),
+                                highlightArrowId: _hintArrowId,
+                                highlightPulse: _hintController?.value ?? 0,
+                                gridOverlayOpacity: _gridOverlayOpacity,
+                                smashingArrows: _buildSmashingAnimList(),
+                              ),
+                              size: Size(gridWidth, gridHeight),
                             ),
-                            size: Size(gridWidth, gridHeight),
                           ),
                         ),
                       ),
