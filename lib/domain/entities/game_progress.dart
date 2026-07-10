@@ -16,10 +16,7 @@ class GameProgress {
     required this.userId,
     List<String>? completedLevels,
     Map<String, int>? bestScores,
-    // TODO: no real coin-earning economy exists yet (RF09). Defaulting new
-    // players to a high balance so power-ups are free to test end-to-end;
-    // revert to 0 once players can actually earn coins through gameplay.
-    this.coins = 9999,
+    this.coins = 0,
     this.avatarEmoji = '🎮',
   })
       : completedLevels = completedLevels ?? [],
@@ -30,9 +27,14 @@ class GameProgress {
   int? getBestScore(String levelId) => bestScores[levelId];
 
   void recordCompletion(String levelId, int score) {
-    if (!completedLevels.contains(levelId)) {
+    final isFirstCompletion = !completedLevels.contains(levelId);
+
+    if (isFirstCompletion) {
       completedLevels.add(levelId);
+      // Award coins only on first completion
+      addCoins(score);
     }
+
     final currentBest = bestScores[levelId] ?? 0;
     if (score > currentBest) {
       bestScores[levelId] = score;

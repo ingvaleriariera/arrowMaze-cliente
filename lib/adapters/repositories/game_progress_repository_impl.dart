@@ -140,14 +140,12 @@ class GameProgressRepositoryImpl implements IGameProgressRepository {
         syncedProgress.avatarEmoji = localProgress.avatarEmoji;
       }
 
-      // TEMPORARY, client-only: force a generous testing balance on every
-      // sync instead of trusting the backend's real (mostly zero) balance.
-      // There's no real coin-earning economy yet (RF09 — see GameProgress's
-      // own default), so respecting the real persisted balance here just
-      // makes power-ups untestable. Spending still works normally locally
-      // between syncs; this only resets the floor back up on login.
-      // Remove once players can actually earn coins through gameplay.
-      syncedProgress.coins = 9999;
+      // Use the greater balance between local and backend (protection against
+      // data loss). Backend is the source of truth, but if local somehow has
+      // more (race condition or sync issue), preserve the higher value.
+      if (localProgress != null && localProgress.coins > syncedProgress.coins) {
+        syncedProgress.coins = localProgress.coins;
+      }
 
       // Save synced progress locally (to both sqflite and cache)
       await save(syncedProgress);
