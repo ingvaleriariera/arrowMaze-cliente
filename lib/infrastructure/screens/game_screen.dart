@@ -79,6 +79,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
   final Map<String, _PendingSmash> _pendingSmashes = {};
+  late TransformationController _transformationController;
 
   // Power-up UI state. `_pendingPowerUp` is non-null while waiting for the
   // player to tap a target arrow (currently only 'HAMMER' needs this —
@@ -104,6 +105,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   @override
   void initState() {
     super.initState();
+    _transformationController = TransformationController();
     debugPrint('🎮 GameScreen.initState: levelId=${widget.levelId}');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -125,6 +127,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
     _hintController?.dispose();
     _gridController?.dispose();
+    _transformationController.dispose();
     super.dispose();
   }
 
@@ -401,12 +404,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
           ),
         ],
       ),
-      body: _buildBody(gameState, gameNotifier),
+      body: _buildBody(gameState, gameNotifier, l10n),
     );
   }
 
-  Widget _buildBody(GameState gameState, GameNotifier gameNotifier) {
-    final l10n = AppLocalizations.of(context);
+  Widget _buildBody(GameState gameState, GameNotifier gameNotifier, AppLocalizations l10n) {
     if (gameState.error != null) {
       return Center(child: Text('Error: ${gameState.error}'));
     }
@@ -467,8 +469,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     child: InteractiveViewer(
                       minScale: 0.5,
                       maxScale: 3.0,
-                      boundaryMargin: const EdgeInsets.all(100),
-                      constrained: false,
+                      boundaryMargin: const EdgeInsets.all(200),
+                      constrained: true,
+                      panEnabled: true,
+                      scaleEnabled: true,
+                      transformationController: _transformationController,
                       child: Center(
                         child: SizedBox(
                           width: gridWidth,
