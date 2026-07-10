@@ -25,46 +25,52 @@ class BoardGraph {
       );
     }
 
-    // For each arrow, scan its exit path from the HEAD
+    // The shape's bounding box: an arrow's ray only truly leaves the
+    // board once it passes this, not at the first void cell — interior
+    // holes are NOT exits when there's board (and possibly arrows)
+    // beyond them. Computed once, not per arrow.
+    final allCells = shape.getCells();
+    late int maxX, maxY;
+    if (allCells.isNotEmpty) {
+      maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
+      maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
+    } else {
+      maxX = 100;
+      maxY = 100;
+    }
+
+    // For each arrow, scan its exit path from the HEAD all the way to
+    // the bounding box — tunneling across interior holes. This makes
+    // blockedBy encode the same rule the game applies on tap
+    // (isActivatable + hasVoidReentry): an arrow whose ray crosses a
+    // hole and hits an arrow on the far side is blocked by it, and gets
+    // freed dynamically when that arrow fires (removeArrow prunes
+    // blockedBy). Stopping at the first void instead — the old behavior
+    // — declared those arrows free, which is what made ring-shaped
+    // boards (level 15) unwinnable: generation and the solvability
+    // check believed arrows could exit into the hollow center while the
+    // actual game refused to fire them.
     for (final arrow in arrows.values) {
       var position = arrow.getHead().position;
       final direction = arrow.getDirection();
 
-      // Scan from head in direction until we reach exit (edge or void)
       while (true) {
         final nextPos = position.translate(direction);
-
-        // Stop if: board edge OR void cell
-        if (!shape.contains(nextPos)) {
-          break; // Arrow can exit here
+        if (nextPos.x < 0 ||
+            nextPos.y < 0 ||
+            nextPos.x > maxX ||
+            nextPos.y > maxY) {
+          break; // Truly off the board — the arrow can exit here
         }
 
-        // Check if another arrow occupies this cell
-        final occupiedByArrowId = grid[nextPos.toKey()];
-        if (occupiedByArrowId != null && occupiedByArrowId != arrow.id) {
-          // Found blocker — add it but CONTINUE scanning
-          nodes[arrow.id]!.blockedBy.add(occupiedByArrowId);
+        if (shape.contains(nextPos)) {
+          final occupiedByArrowId = grid[nextPos.toKey()];
+          if (occupiedByArrowId != null && occupiedByArrowId != arrow.id) {
+            nodes[arrow.id]!.blockedBy.add(occupiedByArrowId);
+          }
         }
 
         position = nextPos;
-      }
-      bool foundVoid = false;
-      var position2 = arrow.getHead().position;
-      final allCells = shape.getCells();
-      late int maxX, maxY;
-      if (allCells.isNotEmpty) {
-        maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
-        maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
-      } else {
-        maxX = 100;
-        maxY = 100;
-      }
-      while (true) {
-        final nextPos2 = position2.translate(direction);
-        if (nextPos2.x < 0 || nextPos2.y < 0 || nextPos2.x > maxX || nextPos2.y > maxY) break;
-        if (!shape.contains(nextPos2)) { foundVoid = true; }
-        else if (foundVoid && shape.contains(nextPos2)) { nodes[arrow.id]!.blockedByVoidReentry = true; break; }
-        position2 = nextPos2;
       }
     }
 

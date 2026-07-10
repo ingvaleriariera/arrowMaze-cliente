@@ -38,6 +38,7 @@ class BoardBuilder {
 
   BoardBuilder setShape(BoardShape shape) {
     _shape = shape;
+    _cachedBounds = null;
     return this;
   }
 
@@ -115,7 +116,7 @@ class BoardBuilder {
     for (int attempt = 0; attempt < 80; attempt++) {
       _arrows.clear();
       _generateArrows();
-      _fillUncoveredCells();
+      var fillerIds = _fillUncoveredCells();
 
       final totalArrows = _arrows.length;
       if (totalArrows <= 3) continue;
@@ -123,7 +124,7 @@ class BoardBuilder {
       // Probe on a throwaway graph: _countUnsolvable drains it via
       // removeArrow, so the board actually returned below needs its own
       // fresh one.
-      final probe = _buildWithExistingArrows();
+      var probe = _buildWithExistingArrows();
       final activatable = probe.graph.getActivatable();
       if (activatable.length >= totalArrows) {
         debugPrint(
@@ -137,13 +138,34 @@ class BoardBuilder {
       // playthrough (remove every currently activatable arrow, repeat)
       // catches that, which just checking "not all arrows start free"
       // doesn't.
-      final stuck = _countUnsolvable(probe);
+      var stuck = _findUnsolvableIds(probe).length;
+
+      // A blocking cycle always involves at least one filler arrow: the
+      // main loop's arrows are each activatable w.r.t. everything placed
+      // before them, so firing them in reverse placement order always
+      // clears a filler-less board. That means re-rolling just the fillers
+      // (directions are shuffled per roll) can fix a stuck board far more
+      // cheaply than discarding the whole attempt — which matters on
+      // shapes like level 15's ring, whose narrow corridors leave many
+      // leftover cells and made every attempt likely to jam.
+      for (int refill = 0; stuck > 0 && refill < 6; refill++) {
+        for (final id in fillerIds) {
+          _arrows.remove(id);
+        }
+        fillerIds = _fillUncoveredCells();
+        probe = _buildWithExistingArrows();
+        stuck = _findUnsolvableIds(probe).length;
+      }
+
       debugPrint(
-          '🧪 Generation attempt $attempt: $totalArrows arrows, ${activatable.length} activatable, $stuck stuck');
+          '🧪 Generation attempt $attempt: ${_arrows.length} arrows, ${activatable.length} activatable, $stuck stuck');
 
       if (stuck == 0) {
         debugPrint('✅ Valid puzzle found!');
-        _calculatedMaxMoves = calculateMaxMoves(totalArrows, _difficultyStr);
+        // _arrows.length, not totalArrows: refills can change the filler
+        // count slightly, and maxMoves must match what's actually shipped.
+        _calculatedMaxMoves =
+            calculateMaxMoves(_arrows.length, _difficultyStr);
         return _buildWithExistingArrows();
       }
 
@@ -153,28 +175,52 @@ class BoardBuilder {
       }
     }
 
-    // Every attempt left something unsolvable — ship the closest call we
-    // saw (fewest permanently-stuck arrows) instead of blindly the
-    // arbitrary last attempt, which could be far worse.
+    // Every attempt left something unsolvable — take the closest call we
+    // saw (fewest permanently-stuck arrows) and REPAIR it rather than
+    // shipping it as-is. Deleting exactly the stuck set from a jammed
+    // board is guaranteed to leave a fully solvable one: the playthrough
+    // simulation already removed every other arrow, so with the jam gone
+    // the same removal order clears the board. A few repair rounds first
+    // try to re-fill the freed cells (so they don't end up arrow-less);
+    // if the refill re-jams every time, the final round deletes the stuck
+    // set without refilling — a couple of empty cells is a cosmetic
+    // blemish, an unwinnable level is a broken game.
     debugPrint(
-        '⚠️  Max attempts reached, using best candidate ($bestStuckCount stuck arrow(s))');
+        '⚠️  Max attempts reached, repairing best candidate ($bestStuckCount stuck arrow(s))');
     if (bestArrows != null) {
       _arrows
         ..clear()
         ..addAll(bestArrows);
     }
+
+    var stuckIds = _findUnsolvableIds(_buildWithExistingArrows());
+    for (int repair = 0; stuckIds.isNotEmpty && repair < 5; repair++) {
+      for (final id in stuckIds) {
+        _arrows.remove(id);
+      }
+      _fillUncoveredCells();
+      stuckIds = _findUnsolvableIds(_buildWithExistingArrows());
+    }
+    if (stuckIds.isNotEmpty) {
+      debugPrint(
+          '🩹 Repair: dropping ${stuckIds.length} permanently stuck arrow(s), leaving their cells uncovered');
+      for (final id in stuckIds) {
+        _arrows.remove(id);
+      }
+    }
+
     final board = _buildWithExistingArrows();
     _calculatedMaxMoves = calculateMaxMoves(_arrows.length, _difficultyStr);
     return board;
   }
 
-  /// Number of arrows with no valid removal order, simulated by
+  /// The ids of arrows with no valid removal order, simulated by
   /// repeatedly removing every currently activatable arrow — exactly
   /// like a player clearing the board — until nothing more can be
   /// removed. Mutates [board]'s graph in place, so callers must only use
   /// this on a throwaway probe board, never the one that's actually
   /// returned.
-  int _countUnsolvable(Board board) {
+  Set<String> _findUnsolvableIds(Board board) {
     final remaining = Set<String>.from(board.arrows.keys);
 
     while (remaining.isNotEmpty) {
@@ -187,7 +233,7 @@ class BoardBuilder {
       }
     }
 
-    return remaining.length;
+    return remaining;
   }
 
   static const int _maxGenerationIterations = 200;
@@ -255,7 +301,12 @@ class BoardBuilder {
   /// activatable path could be grown from them in time; rather than ship
   /// a board with dead, arrow-less cells, fill any leftovers here with
   /// small 1-2 segment arrows grown only through other leftover cells.
-  void _fillUncoveredCells() {
+  ///
+  /// Returns the ids of the arrows it added, so _generateAndBuild can strip
+  /// and re-roll just the fillers when the solvability probe finds a
+  /// blocking cycle (which always involves fillers — see there).
+  List<String> _fillUncoveredCells() {
+    final addedIds = <String>[];
     final grid = <String, String>{};
     for (final arrow in _arrows.values) {
       for (final segment in arrow.segments) {
@@ -264,7 +315,7 @@ class BoardBuilder {
     }
 
     final missing = Set<String>.from(_shape.validCells)..removeAll(grid.keys);
-    if (missing.isEmpty) return;
+    if (missing.isEmpty) return addedIds;
 
     debugPrint('🩹 Filling ${missing.length} uncovered cell(s) with small arrows');
 
@@ -279,12 +330,19 @@ class BoardBuilder {
       // fine either way: _isFullySolvable in _generateAndBuild rejects
       // the whole attempt if a chosen direction turns out to make the
       // board unsolvable, so this is just trying to avoid that retry).
+      // Same acceptance rule as the main generation loop
+      // (_findActivatableArrow): free to fire AND no face-to-face pattern.
+      // Fillers skipping _hasDeadlockPattern was exactly what let arrows
+      // spawn staring at each other across the hollow center of ring
+      // boards (level 15) — the solvability probe can't catch those, since
+      // both arrows can still technically exit into the hole.
       var path = grown;
       var ownCells = grown.map((p) => p.toKey()).toSet();
       var directions = _getVectorsForPath(grown);
       Direction? chosen;
       for (final vec in directions) {
-        if (_isActivatable(grown.last, vec, grid, ownCells: ownCells)) {
+        if (_isActivatable(grown.last, vec, grid, ownCells: ownCells) &&
+            !_hasDeadlockPattern(grown.last, vec, grid)) {
           chosen = vec;
           break;
         }
@@ -295,7 +353,8 @@ class BoardBuilder {
         ownCells = {startPos.toKey()};
         directions = _getVectorsForPath(path);
         for (final vec in directions) {
-          if (_isActivatable(startPos, vec, grid, ownCells: ownCells)) {
+          if (_isActivatable(startPos, vec, grid, ownCells: ownCells) &&
+              !_hasDeadlockPattern(startPos, vec, grid)) {
             chosen = vec;
             break;
           }
@@ -303,13 +362,19 @@ class BoardBuilder {
       }
 
       // Still nothing immediately free: fall back to any direction that
-      // at least doesn't run into this arrow's own not-yet-registered
-      // body. Being blocked by another arrow at generation time is normal
-      // (that's the whole game) as long as it's eventually solvable.
+      // doesn't create a face-to-face pattern and doesn't run into this
+      // arrow's own not-yet-registered body. Being blocked by another
+      // arrow at generation time is normal (that's the whole game) as
+      // long as it's eventually solvable.
       chosen ??= directions.firstWhere(
-        (vec) => _isActivatable(
-            path.last, vec, const <String, String>{}, ownCells: ownCells),
-        orElse: () => directions.first,
+        (vec) =>
+            _isActivatable(path.last, vec, const <String, String>{},
+                ownCells: ownCells) &&
+            !_hasDeadlockPattern(path.last, vec, grid),
+        orElse: () => directions.firstWhere(
+          (vec) => !_hasDeadlockPattern(path.last, vec, grid),
+          orElse: () => directions.first,
+        ),
       );
 
       final arrowId = 'arrow_${_arrows.length}';
@@ -319,6 +384,7 @@ class BoardBuilder {
         segments: segments,
         color: _getColorForIndex(_arrows.length),
       );
+      addedIds.add(arrowId);
 
       for (final segment in segments) {
         grid[segment.position.toKey()] = arrowId;
@@ -327,6 +393,7 @@ class BoardBuilder {
         missing.remove(pos.toKey());
       }
     }
+    return addedIds;
   }
 
   /// True if the shape's bounding box spans at least [n] cells in either
@@ -367,14 +434,26 @@ class BoardBuilder {
     final oppositeDir = direction.opposite();
     var pos = head.translate(direction);
     while (pos.x >= 0 && pos.y >= 0 && pos.x < 100 && pos.y < 100) {
+      // Holes (cells outside the shape, e.g. the hollow center of a ring
+      // board) are deliberately scanned across, not treated as an exit:
+      // an arrow on the far side of the hole is still on the same board
+      // line and the two can stare each other down across the gap.
       if (!_shape.contains(pos)) {
         pos = pos.translate(direction);
         continue;
       }
       final occupiedBy = grid[pos.toKey()];
       if (occupiedBy != null) {
+        // Only a HEAD pointing straight back is a stare-down. Hitting
+        // another arrow's body is ordinary, resolvable blocking (the body
+        // clears once that arrow fires) even if its head, somewhere else
+        // on this line, happens to point the opposite way — vetoing those
+        // too starved narrow ring corridors of legal directions and forced
+        // the filler into blocking cycles (unsolvable level 15 boards).
         final otherArrow = _arrows[occupiedBy];
-        if (otherArrow != null && otherArrow.getDirection() == oppositeDir) {
+        if (otherArrow != null &&
+            otherArrow.getDirection() == oppositeDir &&
+            otherArrow.getHead().position == pos) {
           return true;
         }
         return false;
@@ -486,18 +565,22 @@ class BoardBuilder {
     var cx = head.x + vec.dx;
     var cy = head.y + vec.dy;
 
-    while (cx >= 0 && cy >= 0 && cx < 100 && cy < 100) {
+    // Same exit rule as BoardGraph.build and the in-game tap check
+    // (hasVoidReentry): interior holes are NOT exits — the ray tunnels
+    // across them, and any occupied cell on the far side blocks. The ray
+    // only truly leaves the board past the shape's bounding box.
+    final bounds = _shapeBounds();
+
+    while (cx >= 0 && cy >= 0 && cx <= bounds.maxX && cy <= bounds.maxY) {
       final pos = Position(cx, cy);
 
-      // If position is not in shape, it's void (can exit)
-      if (!_shape.contains(pos)) {
-        return true;
-      }
-
-      // Check if blocked by another arrow, or by one of this arrow's own
-      // not-yet-registered cells (see _findActivatableArrow).
-      if (grid['${pos.toKey()}'] != null || (ownCells?.contains(pos.toKey()) ?? false)) {
-        return false;
+      if (_shape.contains(pos)) {
+        // Blocked by another arrow, or by one of this arrow's own
+        // not-yet-registered cells (see _findActivatableArrow).
+        if (grid[pos.toKey()] != null ||
+            (ownCells?.contains(pos.toKey()) ?? false)) {
+          return false;
+        }
       }
 
       cx += vec.dx;
@@ -505,6 +588,19 @@ class BoardBuilder {
     }
 
     return true;
+  }
+
+  ({int maxX, int maxY})? _cachedBounds;
+
+  ({int maxX, int maxY}) _shapeBounds() {
+    final cached = _cachedBounds;
+    if (cached != null) return cached;
+    var maxX = 0, maxY = 0;
+    for (final c in _shape.getCells()) {
+      if (c.x > maxX) maxX = c.x;
+      if (c.y > maxY) maxY = c.y;
+    }
+    return _cachedBounds = (maxX: maxX, maxY: maxY);
   }
 
   List<ArrowSegment> _createArrowSegments(
