@@ -57,7 +57,6 @@ class GameSession {
     } else {
       // Failed move
       failedMoves++;
-      score = (score - 5).clamp(0, 999999);
     }
 
     return result;
@@ -113,12 +112,8 @@ class GameSession {
 
   void calculateFinalScore() {
     if (_state is! VictoryState) return;
-    if (failedMoves == 0) {
-      score = maxScore;
-    } else {
-      final movesRemaining = maxMoves - moves;
-      score = (maxScore * movesRemaining ~/ maxMoves).clamp(0, maxScore);
-    }
+    final accuracy = moves > 0 ? (moves - failedMoves) / moves : 1.0;
+    score = (maxScore * accuracy).toInt().clamp(0, maxScore);
   }
 
   bool isOver() => _state.isOver();
