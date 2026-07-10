@@ -24,7 +24,7 @@ class DefeatScreen extends ConsumerWidget {
               style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
-            const Text('Game Over'),
+            Text(l10n.translate('gameOver')),
             const SizedBox(height: 48),
             ElevatedButton(
               onPressed: () {
@@ -43,7 +43,7 @@ class DefeatScreen extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey,
               ),
-              child: const Text('Back to Levels'),
+              child: Text(l10n.translate('backToLevels')),
             ),
           ],
         ),

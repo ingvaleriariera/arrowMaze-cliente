@@ -94,7 +94,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                 if (!isGlobal) ...[
                   const SizedBox(height: 12),
                   _availableLevelIds.isEmpty
-                      ? const Text('Loading levels...')
+                      ? Text(l10n.translate('loadingLevels'))
                       : DropdownButton<String>(
                           value: _selectedLevelId,
                           items: _availableLevelIds.asMap().entries.map((entry) {
@@ -119,22 +119,24 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F5A0)))
                 : leaderboardState.error != null
                     ? Center(child: Text(leaderboardState.error!))
-                    : _buildLeaderboardBody(isGlobal
-                        ? leaderboardState.globalEntries
-                            .map((e) => _DisplayEntry(rank: e.rank, username: e.username, score: e.totalScore))
-                            .toList()
-                        : leaderboardState.entries
-                            .map((e) => _DisplayEntry(rank: e.rank, username: e.username, score: e.score))
-                            .toList()),
+                    : _buildLeaderboardBody(
+                        isGlobal
+                            ? leaderboardState.globalEntries
+                                .map((e) => _DisplayEntry(rank: e.rank, username: e.username, score: e.totalScore))
+                                .toList()
+                            : leaderboardState.entries
+                                .map((e) => _DisplayEntry(rank: e.rank, username: e.username, score: e.score))
+                                .toList(),
+                        l10n),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLeaderboardBody(List<_DisplayEntry> entries) {
+  Widget _buildLeaderboardBody(List<_DisplayEntry> entries, AppLocalizations l10n) {
     if (entries.isEmpty) {
-      return const Center(child: Text('No leaderboard data'));
+      return Center(child: Text(l10n.translate('noLeaderboardData')));
     }
 
     final podium = entries.take(3).toList();

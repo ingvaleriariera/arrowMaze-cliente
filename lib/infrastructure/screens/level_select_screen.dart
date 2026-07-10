@@ -108,6 +108,7 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
   }
 
   Widget _buildBody(BuildContext context, LevelSelectState state) {
+    final l10n = AppLocalizations.of(context);
     debugPrint('🎨 LevelSelectScreen._buildBody: isLoading=${state.isLoading}, levels=${state.levels.length}');
 
     if (state.isLoading) {
@@ -124,7 +125,7 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
 
     if (state.levels.isEmpty) {
       debugPrint('   → No levels (empty list)');
-      return const Center(child: Text('No levels available'));
+      return Center(child: Text(l10n.translate('noLevelsAvailable')));
     }
 
     debugPrint('   → Showing ${state.levels.length} levels in grid');

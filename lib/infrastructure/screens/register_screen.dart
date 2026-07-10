@@ -5,6 +5,7 @@ import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/domain/validators/auth_validator.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/password_requirements.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/mappers/validation_error_mapper.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -50,7 +51,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     final result = AuthValidator.validateEmail(email);
-    setState(() => _emailError = result.isValid ? null : result.message);
+    setState(() {
+      _emailError = result.isValid
+          ? null
+          : (result.errorType != null
+              ? ValidationErrorMapper.toTranslationKey(result.errorType!)
+              : null);
+    });
   }
 
   void _onUsernameChanged() {
@@ -64,7 +71,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     final result = AuthValidator.validateUsername(username);
-    setState(() => _usernameError = result.isValid ? null : result.message);
+    setState(() {
+      _usernameError = result.isValid
+          ? null
+          : (result.errorType != null
+              ? ValidationErrorMapper.toTranslationKey(result.errorType!)
+              : null);
+    });
   }
 
   void _onPasswordChanged() {
@@ -139,7 +152,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     color: _emailError != null ? Colors.red : Colors.grey,
                   ),
                 ),
-                errorText: _emailError,
+                errorText: _emailError != null ? l10n.translate(_emailError!) : null,
                 errorBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.red),
                 ),
@@ -159,7 +172,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     color: _usernameError != null ? Colors.red : Colors.grey,
                   ),
                 ),
-                errorText: _usernameError,
+                errorText: _usernameError != null ? l10n.translate(_usernameError!) : null,
                 errorBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.red),
                 ),
@@ -235,7 +248,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 16),
             TextButton(
               onPressed: authState.isLoading ? null : () => context.go('/login'),
-              child: const Text('Volver a login'),
+              child: Text(l10n.translate('backToLogin')),
             ),
           ],
         ),

@@ -13,6 +13,8 @@ class SettingsScreen extends ConsumerWidget {
     final settingsState = ref.watch(settingsNotifierProvider);
     final settingsNotifier = ref.read(settingsNotifierProvider.notifier);
     final authNotifier = ref.read(authNotifierProvider.notifier);
+    final localeNotifier = ref.read(localeNotifierProvider.notifier);
+    final currentLocale = ref.watch(localeNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.translate('settings'))),
@@ -37,10 +39,42 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (_) => settingsNotifier.toggleVibration(),
           ),
           ListTile(
-            title: const Text('Language'),
-            subtitle: const Text('English / Español'),
+            title: Text(l10n.translate('language')),
+            subtitle: Text(l10n.translate('languageSubtitle')),
             onTap: () {
-              // Language switching logic
+              showDialog(
+                context: context,
+                builder: (BuildContext context) => AlertDialog(
+                  title: Text(l10n.translate('language')),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioListTile<String>(
+                        title: const Text('English'),
+                        value: 'en',
+                        groupValue: currentLocale.languageCode,
+                        onChanged: (value) {
+                          if (value == 'en') {
+                            localeNotifier.setLocale(const Locale('en', ''));
+                          }
+                          Navigator.pop(context);
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Español'),
+                        value: 'es',
+                        groupValue: currentLocale.languageCode,
+                        onChanged: (value) {
+                          if (value == 'es') {
+                            localeNotifier.setLocale(const Locale('es', ''));
+                          }
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
             },
           ),
           Padding(

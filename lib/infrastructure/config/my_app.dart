@@ -21,6 +21,8 @@ class MyApp extends ConsumerWidget {
     apiClient.addInterceptor(LoggingInterceptor());
     apiClient.addInterceptor(ErrorInterceptor());
 
+    final locale = ref.watch(localeNotifierProvider);
+
     return MaterialApp.router(
       title: 'Arrow Maze',
       theme: ThemeData(
@@ -39,6 +41,7 @@ class MyApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      locale: locale,
       routerConfig: AppRouter.router,
     );
   }

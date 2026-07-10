@@ -1,3 +1,5 @@
+import 'package:arrow_maze_cliente_copy/domain/entities/validation_error_type.dart';
+
 class AuthValidator {
   static const String _emailRegex =
       r'^[a-zA-Z0-9._]{3,}@[a-zA-Z0-9._]+\.[a-zA-Z]{2,}$';
@@ -12,6 +14,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El correo es requerido',
+        errorType: ValidationErrorType.emailRequired,
       );
     }
 
@@ -20,6 +23,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El correo debe contener exactamente un @',
+        errorType: ValidationErrorType.emailMustHaveAt,
       );
     }
 
@@ -28,6 +32,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El correo debe tener más de 3 caracteres antes del @',
+        errorType: ValidationErrorType.emailTooShort,
       );
     }
 
@@ -38,6 +43,7 @@ class AuthValidator {
         isValid: false,
         message:
             'El correo contiene caracteres no permitidos (solo . y _ están permitidos)',
+        errorType: ValidationErrorType.emailInvalidChars,
       );
     }
 
@@ -45,6 +51,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'Formato de correo inválido',
+        errorType: ValidationErrorType.emailInvalidFormat,
       );
     }
 
@@ -59,6 +66,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El usuario es requerido',
+        errorType: ValidationErrorType.usernameRequired,
       );
     }
 
@@ -66,6 +74,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El usuario debe tener al menos 3 caracteres',
+        errorType: ValidationErrorType.usernameTooShort,
       );
     }
 
@@ -76,6 +85,7 @@ class AuthValidator {
         isValid: false,
         message:
             'El usuario contiene caracteres no permitidos (solo . y _ están permitidos)',
+        errorType: ValidationErrorType.usernameInvalidChars,
       );
     }
 
@@ -83,6 +93,7 @@ class AuthValidator {
       return ValidationResult(
         isValid: false,
         message: 'El usuario solo puede contener letras, números, . y _',
+        errorType: ValidationErrorType.usernameInvalidFormat,
       );
     }
 
@@ -104,6 +115,7 @@ class AuthValidator {
     return ValidationResult(
       isValid: false,
       message: 'Ingresa un correo o usuario válido',
+      errorType: ValidationErrorType.invalidEmailOrUsername,
     );
   }
 
@@ -142,11 +154,13 @@ class AuthValidator {
 
 class ValidationResult {
   final bool isValid;
-  final String? message;
+  final String? message; // Deprecated: kept for backwards compatibility
+  final ValidationErrorType? errorType; // Agnóstico de presentación
 
   ValidationResult({
     required this.isValid,
     this.message,
+    this.errorType,
   });
 }
 
@@ -165,5 +179,15 @@ class PasswordValidationResult {
     if (!hasSpecialChar) missing.add('1 carácter especial');
 
     return missing.join(', ');
+  }
+
+  List<String> getErrorMessageKeys() {
+    final missing = <String>[];
+
+    if (!hasMinLength) missing.add('passwordMinLength');
+    if (!hasUpperCase) missing.add('passwordNeedsUpperCase');
+    if (!hasSpecialChar) missing.add('passwordNeedsSpecialChar');
+
+    return missing;
   }
 }

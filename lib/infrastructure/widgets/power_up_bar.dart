@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 
 /// Static description of one power-up button, purely presentational — the
 /// actual purchase/use logic lives in GameScreen via [onSelect].
 class _PowerUpInfo {
   final String type;
   final IconData icon;
-  final String label;
+  final String labelKey;
   final int cost;
-  final String description;
+  final String descriptionKey;
 
   const _PowerUpInfo({
     required this.type,
     required this.icon,
-    required this.label,
+    required this.labelKey,
     required this.cost,
-    required this.description,
+    required this.descriptionKey,
   });
 }
 
@@ -22,31 +23,30 @@ const _powerUps = [
   _PowerUpInfo(
     type: 'HINT',
     icon: Icons.lightbulb,
-    label: 'Pista',
+    labelKey: 'hintName',
     cost: 100,
-    description: 'Resalta una flecha que puede salir ahora mismo.',
+    descriptionKey: 'hintDescription',
   ),
   _PowerUpInfo(
     type: 'GRID',
     icon: Icons.grid_view,
-    label: 'Cuadrícula',
+    labelKey: 'gridName',
     cost: 50,
-    description: 'Muestra hacia dónde sale cada flecha del tablero.',
+    descriptionKey: 'gridDescription',
   ),
   _PowerUpInfo(
     type: 'HAMMER',
     icon: Icons.construction,
-    label: 'Martillo',
+    labelKey: 'hammerName',
     cost: 100,
-    description: 'Toca cualquier flecha del tablero para destruirla, '
-        'incluso si está bloqueada.',
+    descriptionKey: 'hammerDescription',
   ),
   _PowerUpInfo(
     type: 'MAGNET',
     icon: Icons.control_camera,
-    label: 'Imán',
+    labelKey: 'magnetName',
     cost: 500,
-    description: 'Elimina hasta 5 flechas que ya pueden salir del tablero.',
+    descriptionKey: 'magnetDescription',
   ),
 ];
 
@@ -64,6 +64,16 @@ class PowerUpBar extends StatelessWidget {
     this.pendingType,
     super.key,
   });
+
+  String _getPowerUpLabel(BuildContext context, String labelKey) {
+    final l10n = AppLocalizations.of(context);
+    return l10n.translate(labelKey);
+  }
+
+  String _getPowerUpDescription(BuildContext context, String descriptionKey) {
+    final l10n = AppLocalizations.of(context);
+    return l10n.translate(descriptionKey);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +111,7 @@ class PowerUpBar extends StatelessWidget {
   }
 
   void _showInfoSheet(BuildContext context, _PowerUpInfo info) {
+    final l10n = AppLocalizations.of(context);
     final affordable = coins >= info.cost;
     showModalBottomSheet(
       context: context,
@@ -112,13 +123,13 @@ class PowerUpBar extends StatelessWidget {
           children: [
             Icon(info.icon, color: const Color(0xFF00F5A0), size: 40),
             const SizedBox(height: 12),
-            Text(info.label,
+            Text(l10n.translate(info.labelKey),
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(info.description,
+            Text(l10n.translate(info.descriptionKey),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 20),
@@ -139,8 +150,8 @@ class PowerUpBar extends StatelessWidget {
             ),
             if (!affordable) ...[
               const SizedBox(height: 8),
-              const Text('No tienes suficientes monedas',
-                  style: TextStyle(color: Color(0xFFFF3366), fontSize: 12)),
+              Text(l10n.translate('notEnoughCoins'),
+                  style: const TextStyle(color: Color(0xFFFF3366), fontSize: 12)),
             ],
           ],
         ),
@@ -164,6 +175,7 @@ class _PowerUpButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -186,7 +198,7 @@ class _PowerUpButton extends StatelessWidget {
                 color: affordable ? const Color(0xFF00F5A0) : Colors.grey,
                 size: 26),
             const SizedBox(height: 4),
-            Text(info.label,
+            Text(l10n.translate(info.labelKey),
                 style: TextStyle(
                     color: affordable ? Colors.white : Colors.grey,
                     fontSize: 11)),

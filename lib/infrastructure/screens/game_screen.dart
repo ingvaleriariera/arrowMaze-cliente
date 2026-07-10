@@ -406,6 +406,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildBody(GameState gameState, GameNotifier gameNotifier) {
+    final l10n = AppLocalizations.of(context);
     if (gameState.error != null) {
       return Center(child: Text('Error: ${gameState.error}'));
     }
@@ -556,13 +557,13 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Toca una flecha para destruirla',
-                        style: TextStyle(color: Colors.white)),
+                    Text(l10n.translate('tapArrowToDestroy'),
+                        style: const TextStyle(color: Colors.white)),
                     const SizedBox(width: 12),
                     GestureDetector(
                       onTap: () => setState(() => _pendingPowerUp = null),
-                      child: const Text('Cancelar',
-                          style: TextStyle(
+                      child: Text(l10n.translate('cancel'),
+                          style: const TextStyle(
                               color: Color(0xFFFF3366),
                               fontWeight: FontWeight.bold)),
                     ),

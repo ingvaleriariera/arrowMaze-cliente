@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/api/api_client.dart';
+import 'package:arrow_maze_cliente_copy/adapters/notifiers/locale_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/level_mapper.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/progress_mapper.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/api_config.dart';
@@ -211,4 +213,8 @@ final settingsNotifierProvider = StateNotifierProvider<SettingsNotifier, Setting
   SettingsNotifier(
     audioService: ref.watch(audioServiceProvider),
   )
+);
+
+final localeNotifierProvider = StateNotifierProvider<LocaleNotifier, Locale>((ref) =>
+  LocaleNotifier(const Locale('en', ''))
 );

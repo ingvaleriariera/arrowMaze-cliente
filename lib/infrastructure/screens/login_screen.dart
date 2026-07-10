@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/domain/validators/auth_validator.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/mappers/validation_error_mapper.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -49,7 +50,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     final result = AuthValidator.validateEmailOrUsername(input);
-    setState(() => _emailOrUsernameError = result.isValid ? null : result.message);
+    setState(() {
+      _emailOrUsernameError = result.isValid
+          ? null
+          : (result.errorType != null
+              ? ValidationErrorMapper.toTranslationKey(result.errorType!)
+              : null);
+    });
 
     if (result.isValid) {
       _checkFaceIdForEmail(input);
@@ -146,7 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         _emailOrUsernameError != null ? Colors.red : Colors.grey,
                   ),
                 ),
-                errorText: _emailOrUsernameError,
+                errorText: _emailOrUsernameError != null ? l10n.translate(_emailOrUsernameError!) : null,
                 errorBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.red),
                 ),
@@ -187,7 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Text(
-                          'Identificación biométrica',
+                          l10n.translate('biometricIdentification'),
                           style: TextStyle(
                             color: _emailOrUsernameController.text.isNotEmpty &&
                                     _canUseFaceIdForEmail &&

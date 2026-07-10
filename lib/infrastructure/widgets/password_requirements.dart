@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:arrow_maze_cliente_copy/domain/validators/auth_validator.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 
 class PasswordRequirements extends StatelessWidget {
   final String password;
@@ -22,6 +23,7 @@ class PasswordRequirements extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final l10n = AppLocalizations.of(context);
     final result = AuthValidator.validatePassword(password);
 
     return Container(
@@ -38,7 +40,7 @@ class PasswordRequirements extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Requisitos de contraseña',
+            l10n.translate('passwordRequirements'),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: neonGreen,
                   fontWeight: FontWeight.bold,
@@ -47,19 +49,19 @@ class PasswordRequirements extends StatelessWidget {
           const SizedBox(height: 12),
           _RequirementRow(
             icon: Icons.format_list_numbered,
-            text: '8 caracteres mínimo',
+            text: l10n.translate('passwordRequiresMinLength'),
             isValid: result.hasMinLength,
           ),
           const SizedBox(height: 8),
           _RequirementRow(
             icon: Icons.text_fields,
-            text: 'Al menos 1 mayúscula',
+            text: l10n.translate('passwordRequiresUpperCase'),
             isValid: result.hasUpperCase,
           ),
           const SizedBox(height: 8),
           _RequirementRow(
             icon: Icons.security,
-            text: 'Al menos 1 carácter especial (@#\$%^&*)',
+            text: l10n.translate('passwordRequiresSpecialChar'),
             isValid: result.hasSpecialChar,
           ),
         ],
