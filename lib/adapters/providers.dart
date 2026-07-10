@@ -43,6 +43,8 @@ import 'package:arrow_maze_cliente_copy/application/usecases/leaderboard/get_glo
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progress_use_case.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_time_limit_policy.dart';
+import 'package:arrow_maze_cliente_copy/domain/services/per_arrow_time_limit_policy.dart';
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
@@ -88,10 +90,16 @@ final gameProgressDatabaseProvider = Provider((ref) => GameProgressDatabase());
 // lifetime, same as the other repository providers.
 final boardCacheProvider = Provider((ref) => InMemoryBoardCache());
 
+// Clock rule for timed levels (Strategy): typed as the port so consumers
+// depend on the abstraction, not on the concrete per-arrow rule.
+final timeLimitPolicyProvider =
+    Provider<ITimeLimitPolicy>((ref) => PerArrowTimeLimitPolicy());
+
 // Use Cases
 final loadLevelUseCaseProvider = Provider((ref) => LoadLevelUseCase(
   levelRepository: ref.watch(levelRepositoryProvider),
   boardCache: ref.watch(boardCacheProvider),
+  timeLimitPolicy: ref.watch(timeLimitPolicyProvider),
 ));
 
 final preloadLevelsUseCaseProvider = Provider((ref) => PreloadLevelsUseCase(

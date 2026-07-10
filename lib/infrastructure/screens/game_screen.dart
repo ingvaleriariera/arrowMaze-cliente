@@ -102,6 +102,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
     return l10n.translate(raw);
   }
 
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -119,6 +125,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   void dispose() {
+    // Leaving the screen mid-game (back gesture) must stop a timed
+    // level's countdown, or the abandoned session keeps ticking toward a
+    // TIME_UP defeat in the background. Safe here: stopTimer only cancels
+    // the Timer, it never touches notifier state during dispose.
+    ref.read(gameNotifierProvider.notifier).stopTimer();
     for (final exit in _pendingExits.values) {
       exit.controller.dispose();
     }
@@ -384,6 +395,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
         ? '${l10n.translate('level')} $_levelNumber'
         : '${l10n.translate('level')} $_levelNumber · $difficultyLabel';
 
+    final session = gameState.session;
+    final isTimed = session != null && session.isTimedLevel();
+    final timeLeft = isTimed ? (session.timeRemaining ?? 0) : 0;
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -391,9 +406,31 @@ class _GameScreenState extends ConsumerState<GameScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(hudTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(
-              '${l10n.translate('moves')}: ${gameState.session?.moves ?? 0}/${gameState.session?.maxMoves ?? 0}',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${l10n.translate('moves')}: ${session?.moves ?? 0}/${session?.maxMoves ?? 0}',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+                ),
+                if (isTimed) ...[
+                  const SizedBox(width: 10),
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 12,
+                    color: timeLeft <= 30 ? const Color(0xFFFF3366) : Colors.white70,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    _formatTime(timeLeft),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: timeLeft <= 30 ? FontWeight.bold : FontWeight.normal,
+                      color: timeLeft <= 30 ? const Color(0xFFFF3366) : null,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),

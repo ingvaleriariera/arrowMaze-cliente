@@ -314,10 +314,19 @@ class GameNotifier extends StateNotifier<GameState> {
 
         if (state.session!.isOver()) {
           _stopTimer();
+          // Running out of time must close the session the same way a
+          // deadlock or out-of-moves defeat does (save progress etc.) —
+          // this is the only game-over that doesn't come from executeMove.
+          unawaited(_handleSessionOverIfNeeded());
         }
       }
     });
   }
+
+  /// For screens leaving mid-game (e.g. iOS swipe-back out of GameScreen):
+  /// without this, a timed session keeps ticking in the background and can
+  /// "lose" a level the player already walked away from.
+  void stopTimer() => _stopTimer();
 
   void _stopTimer() {
     debugPrint('⏱️  GameNotifier._stopTimer: Stopping timer');

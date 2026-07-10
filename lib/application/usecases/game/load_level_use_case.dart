@@ -5,12 +5,18 @@ import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_time_limit_policy.dart';
 
 class LoadLevelUseCase {
   final ILevelRepository levelRepository;
   final IBoardCache boardCache;
+  final ITimeLimitPolicy timeLimitPolicy;
 
-  LoadLevelUseCase({required this.levelRepository, required this.boardCache});
+  LoadLevelUseCase({
+    required this.levelRepository,
+    required this.boardCache,
+    required this.timeLimitPolicy,
+  });
 
   Future<GameSession> execute(String levelId) async {
     debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId');
@@ -68,11 +74,23 @@ class LoadLevelUseCase {
     final activatable = board.graph.getActivatable();
     debugPrint('🎯 Activatable at start: $activatable (${activatable.length}/${board.arrows.length})');
 
+    // An explicit backend-provided time limit wins; otherwise the policy
+    // decides from difficulty + how many arrows were actually generated
+    // (only known client-side — the backend never sees the arrows).
+    final timeLimit = level.isTimed()
+        ? level.timeLimit
+        : timeLimitPolicy.forLevel(
+            difficulty: level.difficulty,
+            totalArrows: board.arrows.length,
+          );
+    debugPrint(
+        '⏱️  LoadLevelUseCase: timeLimit=${timeLimit.hasLimit() ? '${timeLimit.getValue()}s' : 'none'} (${level.difficulty}, ${board.arrows.length} arrows)');
+
     final session = GameSession(
       board: board,
       levelId: level.id,
       maxMoves: calculatedMaxMoves,
-      timeRemaining: level.isTimed() ? level.timeLimit.getValue() : null,
+      timeRemaining: timeLimit.hasLimit() ? timeLimit.getValue() : null,
     );
 
     return session;
