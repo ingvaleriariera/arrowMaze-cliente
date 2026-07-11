@@ -32,4 +32,10 @@ class CustomBoardRepositoryImpl implements ICustomBoardRepository {
         .map((b) => CustomBoardDTO.fromJson(b as Map<String, dynamic>))
         .toList();
   }
+
+  @override
+  Future<void> delete(String id) async {
+    debugPrint('🧩 CustomBoardRepositoryImpl.delete: $id');
+    await apiClient.delete('/api/v1/custom-boards/$id');
+  }
 }

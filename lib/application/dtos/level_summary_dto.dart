@@ -6,6 +6,10 @@ class LevelSummaryDTO {
   final bool isTimed;
   final bool unlocked;
 
+  /// Display name override for entries that aren't numbered levels —
+  /// adopted community boards show their board name instead of "Level N".
+  final String? displayName;
+
   LevelSummaryDTO({
     required this.levelId,
     required this.difficulty,
@@ -13,6 +17,7 @@ class LevelSummaryDTO {
     required this.bestScore,
     required this.isTimed,
     required this.unlocked,
+    this.displayName,
   });
 
   @override

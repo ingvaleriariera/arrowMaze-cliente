@@ -7,6 +7,7 @@ import 'dart:convert';
 class CustomBoardDTO {
   final String id;
   final String name;
+  final String authorId;
   final String authorUsername;
   final String difficulty;
   final String boardLayout;
@@ -15,6 +16,7 @@ class CustomBoardDTO {
   const CustomBoardDTO({
     required this.id,
     required this.name,
+    this.authorId = '',
     required this.authorUsername,
     required this.difficulty,
     required this.boardLayout,
@@ -24,6 +26,7 @@ class CustomBoardDTO {
   factory CustomBoardDTO.fromJson(Map<String, dynamic> json) => CustomBoardDTO(
         id: json['id'] as String,
         name: json['name'] as String,
+        authorId: json['authorId'] as String? ?? '',
         authorUsername: json['authorUsername'] as String? ?? 'Unknown',
         difficulty: json['difficulty'] as String,
         boardLayout: json['boardLayout'] as String,
@@ -33,6 +36,7 @@ class CustomBoardDTO {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'authorId': authorId,
         'authorUsername': authorUsername,
         'difficulty': difficulty,
         'boardLayout': boardLayout,

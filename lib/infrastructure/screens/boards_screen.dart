@@ -105,29 +105,77 @@ class _BoardsScreenState extends ConsumerState<BoardsScreen> {
       return Center(child: Text(l10n.translate('noCommunityBoards')));
     }
 
+    final myUserId = ref.read(authNotifierProvider).userId;
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
       itemCount: state.community.length as int,
       itemBuilder: (context, index) {
         final board = state.community[index] as CustomBoardDTO;
         final added = state.isAdded(board.id) as bool;
+        final isOwn = myUserId != null && board.authorId == myUserId;
         return _boardCard(
           l10n,
           board,
-          trailing: added
-              ? const Icon(Icons.check_circle, color: Color(0xFF00F5A0))
-              : ElevatedButton(
-                  onPressed: () =>
-                      ref.read(boardsNotifierProvider.notifier).adopt(board),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00F5A0),
-                    foregroundColor: Colors.black,
-                  ),
-                  child: Text(l10n.translate('addBoard')),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isOwn)
+                IconButton(
+                  icon: const Icon(Icons.delete_forever, color: Color(0xFFFF3366)),
+                  onPressed: () => _confirmDeleteOwn(l10n, board),
                 ),
+              added
+                  ? const Icon(Icons.check_circle, color: Color(0xFF00F5A0))
+                  : ElevatedButton(
+                      onPressed: () =>
+                          ref.read(boardsNotifierProvider.notifier).adopt(board),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00F5A0),
+                        foregroundColor: Colors.black,
+                      ),
+                      child: Text(l10n.translate('addBoard')),
+                    ),
+            ],
+          ),
           onTap: added ? () => _play(board) : null,
         );
       },
+    );
+  }
+
+  void _confirmDeleteOwn(AppLocalizations l10n, CustomBoardDTO board) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        title: Text(l10n.translate('deleteBoardTitle')),
+        content: Text(l10n.translate('deleteBoardMessage')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.translate('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              final ok = await ref
+                  .read(boardsNotifierProvider.notifier)
+                  .deleteOwn(board.id);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(l10n.translate(
+                    ok ? 'boardDeleted' : 'boardDeleteFailed')),
+              ));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3366),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(l10n.translate('deleteBoard')),
+          ),
+        ],
+      ),
     );
   }
 

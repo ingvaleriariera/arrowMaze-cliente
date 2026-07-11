@@ -26,13 +26,20 @@ class GameProgress {
 
   int? getBestScore(String levelId) => bestScores[levelId];
 
+  /// Fraction of the score awarded as coins when replaying an
+  /// already-completed level. Full score on first completion keeps the
+  /// big reward tied to progression; the reduced replay award keeps every
+  /// win worth something without making coin farming trivial.
+  static const double replayCoinFactor = 0.25;
+
   void recordCompletion(String levelId, int score) {
     final isFirstCompletion = !completedLevels.contains(levelId);
 
     if (isFirstCompletion) {
       completedLevels.add(levelId);
-      // Award coins only on first completion
       addCoins(score);
+    } else {
+      addCoins((score * replayCoinFactor).round());
     }
 
     final currentBest = bestScores[levelId] ?? 0;

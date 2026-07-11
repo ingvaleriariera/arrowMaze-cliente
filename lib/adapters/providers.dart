@@ -60,6 +60,7 @@ import 'package:arrow_maze_cliente_copy/adapters/state/boards_state.dart';
 import 'package:arrow_maze_cliente_copy/application/ports/i_custom_board_repository.dart';
 import 'package:arrow_maze_cliente_copy/application/ports/i_my_boards_repository.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/create_custom_board_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/boards/delete_custom_board_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/get_community_boards_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/manage_my_boards_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
@@ -234,6 +235,7 @@ final levelSelectNotifierProvider = StateNotifierProvider<LevelSelectNotifier, L
   LevelSelectNotifier(
     getLevelSummariesUseCase: ref.watch(getLevelSummariesUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
+    manageMyBoardsUseCase: ref.watch(manageMyBoardsUseCaseProvider),
   )
 );
 
@@ -281,11 +283,16 @@ final createCustomBoardUseCaseProvider = Provider((ref) => CreateCustomBoardUseC
       myBoardsRepository: ref.watch(myBoardsRepositoryProvider),
     ));
 
+final deleteCustomBoardUseCaseProvider = Provider((ref) => DeleteCustomBoardUseCase(
+      customBoardRepository: ref.watch(customBoardRepositoryProvider),
+    ));
+
 final boardsNotifierProvider = StateNotifierProvider<BoardsNotifier, BoardsState>((ref) =>
   BoardsNotifier(
     getCommunityBoardsUseCase: ref.watch(getCommunityBoardsUseCaseProvider),
     manageMyBoardsUseCase: ref.watch(manageMyBoardsUseCaseProvider),
     createCustomBoardUseCase: ref.watch(createCustomBoardUseCaseProvider),
+    deleteCustomBoardUseCase: ref.watch(deleteCustomBoardUseCaseProvider),
   )
 );
 

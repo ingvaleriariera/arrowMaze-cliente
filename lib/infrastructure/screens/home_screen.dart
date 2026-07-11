@@ -54,8 +54,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   /// The level the player left off at: first unlocked-but-not-completed
-  /// one, or the last unlocked one if everything's already done.
-  ({LevelSummaryDTO level, int number})? _currentLevel(List<LevelSummaryDTO> levels) {
+  /// one, or the last unlocked one if everything's already done. Only
+  /// considers the numbered progression — adopted community boards (which
+  /// are always "unlocked, not completed") must never become the Play
+  /// button's target.
+  ({LevelSummaryDTO level, int number})? _currentLevel(List<LevelSummaryDTO> allLevels) {
+    final levels = allLevels.where((l) => l.displayName == null).toList();
     if (levels.isEmpty) return null;
     for (int i = 0; i < levels.length; i++) {
       if (levels[i].unlocked && !levels[i].completed) return (level: levels[i], number: i + 1);

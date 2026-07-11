@@ -11,4 +11,8 @@ abstract class ICustomBoardRepository {
 
   /// Community boards, newest first.
   Future<List<CustomBoardDTO>> fetchAll({int limit = 50});
+
+  /// Removes a published board. The backend enforces that only the
+  /// author may do this.
+  Future<void> delete(String id);
 }

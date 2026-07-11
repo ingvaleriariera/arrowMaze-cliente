@@ -1,16 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_aware_level_repository.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
+import 'package:arrow_maze_cliente_copy/application/dtos/level_summary_dto.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/boards/manage_my_boards_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels_use_case.dart';
 
 class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
   final GetLevelSummariesUseCase getLevelSummariesUseCase;
   final PreloadLevelsUseCase preloadLevelsUseCase;
+  final ManageMyBoardsUseCase manageMyBoardsUseCase;
 
   LevelSelectNotifier({
     required this.getLevelSummariesUseCase,
     required this.preloadLevelsUseCase,
+    required this.manageMyBoardsUseCase,
   }) : super(const LevelSelectState());
 
   Future<void> loadSummaries(String userId) async {
@@ -36,9 +41,26 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
         debugPrint('   Position $i: id=${sortedSummaries[i].levelId}, difficulty=${sortedSummaries[i].difficulty}');
       }
 
-      debugPrint('🔄 LevelSelectNotifier: Updating state with isLoading=false');
+      // Adopted community boards appear after the standard progression:
+      // always unlocked (they're free play, outside the sequential
+      // unlock chain) and labeled with their board name.
+      final myBoards = await manageMyBoardsUseCase.getAll();
+      final customSummaries = myBoards
+          .map((board) => LevelSummaryDTO(
+                levelId: CustomAwareLevelRepository.levelIdFor(board.id),
+                difficulty: board.difficulty,
+                completed: false,
+                bestScore: 0,
+                isTimed: board.difficulty.toLowerCase() == 'hard',
+                unlocked: true,
+                displayName: board.name,
+              ))
+          .toList();
+
+      debugPrint('🔄 LevelSelectNotifier: Updating state with isLoading=false '
+          '(${sortedSummaries.length} standard + ${customSummaries.length} custom)');
       state = state.copyWith(
-        levels: sortedSummaries,
+        levels: [...sortedSummaries, ...customSummaries],
         isLoading: false,
       );
       debugPrint('✅ LevelSelectNotifier: State updated successfully');

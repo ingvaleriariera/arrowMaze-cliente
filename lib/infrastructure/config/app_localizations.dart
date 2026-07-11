@@ -126,6 +126,11 @@ class AppLocalizations {
       'noCommunityBoards': 'No boards yet — create the first one!',
       'noMyBoards': 'You haven\'t added any boards yet',
       'byAuthor': 'by',
+      'deleteBoard': 'Delete',
+      'deleteBoardTitle': 'Delete this board?',
+      'deleteBoardMessage': 'It will be removed from the community for everyone.',
+      'boardDeleted': 'Board deleted',
+      'boardDeleteFailed': 'Could not delete the board',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -247,6 +252,11 @@ class AppLocalizations {
       'noCommunityBoards': 'Aún no hay tableros — ¡crea el primero!',
       'noMyBoards': 'No has agregado tableros todavía',
       'byAuthor': 'por',
+      'deleteBoard': 'Eliminar',
+      'deleteBoardTitle': '¿Eliminar este tablero?',
+      'deleteBoardMessage': 'Se quitará de la comunidad para todos.',
+      'boardDeleted': 'Tablero eliminado',
+      'boardDeleteFailed': 'No se pudo eliminar el tablero',
     },
   };
 

@@ -169,7 +169,12 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
                     '/game/${level.levelId}',
                     extra: {
                       'difficulty': level.difficulty,
-                      'levelNumber': index + 1,
+                      // Community boards show their name; numbered levels
+                      // their sequence position.
+                      if (level.displayName != null)
+                        'title': level.displayName
+                      else
+                        'levelNumber': index + 1,
                     },
                   );
                 },
@@ -177,7 +182,13 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
             decoration: BoxDecoration(
               color: level.unlocked ? const Color(0xFF1a1a2e) : const Color(0xFF131320),
               border: Border.all(
-                color: level.unlocked ? const Color(0xFF00F5A0) : const Color(0xFF333344),
+                // Community boards get the cyan accent so they read as a
+                // different "family" from the numbered progression.
+                color: level.displayName != null
+                    ? const Color(0xFF00DDFF)
+                    : level.unlocked
+                        ? const Color(0xFF00F5A0)
+                        : const Color(0xFF333344),
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(8),
@@ -185,7 +196,20 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (level.completed)
+                if (level.displayName != null) ...[
+                  const Icon(Icons.draw, color: Color(0xFF00DDFF), size: 20),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      level.displayName!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ] else if (level.completed)
                   const Icon(Icons.check_circle, color: Colors.green, size: 32)
                 else
                   Text(
@@ -199,6 +223,8 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
                 const SizedBox(height: 8),
                 if (!level.unlocked)
                   const Icon(Icons.lock, color: Color(0xFF555566), size: 18)
+                else if (level.displayName != null)
+                  Text(level.difficulty, style: const TextStyle(fontSize: 11))
                 else
                   Text(level.completed ? 'Score: ${level.bestScore}' : level.difficulty),
               ],
