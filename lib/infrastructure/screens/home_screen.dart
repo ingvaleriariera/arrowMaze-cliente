@@ -176,6 +176,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 ),
           const Spacer(),
           IconButton(
+            icon: const Icon(Icons.draw, color: Color(0xFF00DDFF)),
+            onPressed: () => context.push('/boards'),
+          ),
+          IconButton(
             icon: const Icon(Icons.emoji_events, color: Color(0xFFFFD700)),
             onPressed: () => context.push('/leaderboard'),
           ),

@@ -52,6 +52,17 @@ import 'package:arrow_maze_cliente_copy/application/usecases/lives/buy_life_use_
 import 'package:arrow_maze_cliente_copy/application/usecases/lives/get_lives_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/lives/lose_life_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_lives_repository.dart';
+import 'package:arrow_maze_cliente_copy/adapters/notifiers/boards_notifier.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_aware_level_repository.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_board_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/my_boards_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/state/boards_state.dart';
+import 'package:arrow_maze_cliente_copy/application/ports/i_custom_board_repository.dart';
+import 'package:arrow_maze_cliente_copy/application/ports/i_my_boards_repository.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/boards/create_custom_board_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/boards/get_community_boards_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/boards/manage_my_boards_use_case.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
@@ -63,10 +74,19 @@ final levelMapperProvider = Provider((ref) => LevelMapper());
 final progressMapperProvider = Provider((ref) => ProgressMapper());
 
 // Repositories
-final levelRepositoryProvider = Provider((ref) => LevelRepositoryImpl(
-  apiClient: ref.watch(apiClientProvider),
-  levelMapper: ref.watch(levelMapperProvider),
-));
+// Decorator chain (see CustomAwareLevelRepository): ids with the
+// 'custom-' prefix resolve from the locally adopted community boards,
+// everything else hits the standard backend-backed repository. Consumers
+// only ever see ILevelRepository — the game pipeline can't tell player-
+// made boards from seeded ones.
+final levelRepositoryProvider = Provider<ILevelRepository>((ref) =>
+    CustomAwareLevelRepository(
+      inner: LevelRepositoryImpl(
+        apiClient: ref.watch(apiClientProvider),
+        levelMapper: ref.watch(levelMapperProvider),
+      ),
+      myBoards: ref.watch(myBoardsRepositoryProvider),
+    ));
 
 final gameProgressRepositoryProvider = Provider((ref) => GameProgressRepositoryImpl(
   apiClient: ref.watch(apiClientProvider),
@@ -239,6 +259,33 @@ final livesNotifierProvider = StateNotifierProvider<LivesNotifier, LivesState>((
     getLivesUseCase: ref.watch(getLivesUseCaseProvider),
     loseLifeUseCase: ref.watch(loseLifeUseCaseProvider),
     buyLifeUseCase: ref.watch(buyLifeUseCaseProvider),
+  )
+);
+
+// Custom boards (community level editor)
+final customBoardRepositoryProvider = Provider<ICustomBoardRepository>(
+    (ref) => CustomBoardRepositoryImpl(apiClient: ref.watch(apiClientProvider)));
+
+final myBoardsRepositoryProvider =
+    Provider<IMyBoardsRepository>((ref) => MyBoardsRepositoryImpl());
+
+final getCommunityBoardsUseCaseProvider = Provider((ref) =>
+    GetCommunityBoardsUseCase(
+        customBoardRepository: ref.watch(customBoardRepositoryProvider)));
+
+final manageMyBoardsUseCaseProvider = Provider((ref) =>
+    ManageMyBoardsUseCase(myBoardsRepository: ref.watch(myBoardsRepositoryProvider)));
+
+final createCustomBoardUseCaseProvider = Provider((ref) => CreateCustomBoardUseCase(
+      customBoardRepository: ref.watch(customBoardRepositoryProvider),
+      myBoardsRepository: ref.watch(myBoardsRepositoryProvider),
+    ));
+
+final boardsNotifierProvider = StateNotifierProvider<BoardsNotifier, BoardsState>((ref) =>
+  BoardsNotifier(
+    getCommunityBoardsUseCase: ref.watch(getCommunityBoardsUseCaseProvider),
+    manageMyBoardsUseCase: ref.watch(manageMyBoardsUseCaseProvider),
+    createCustomBoardUseCase: ref.watch(createCustomBoardUseCaseProvider),
   )
 );
 

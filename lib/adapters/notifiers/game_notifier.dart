@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_aware_level_repository.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
@@ -106,10 +107,14 @@ class GameNotifier extends StateNotifier<GameState> {
       // Fire-and-forget: warm the cache for the next couple of levels
       // while the player is busy with this one, so selecting one of them
       // next skips board generation entirely. A failure here must never
-      // affect the level that just loaded successfully.
-      unawaited(preloadLevelsUseCase
-          .execute(_nextLevelIds(levelId, 2))
-          .catchError((e) => debugPrint('⚠️  GameNotifier: Preload failed — $e')));
+      // affect the level that just loaded successfully. Custom boards
+      // have no "next level" (they're outside the sequence), so there's
+      // nothing to warm.
+      if (!CustomAwareLevelRepository.isCustomLevelId(levelId)) {
+        unawaited(preloadLevelsUseCase
+            .execute(_nextLevelIds(levelId, 2))
+            .catchError((e) => debugPrint('⚠️  GameNotifier: Preload failed — $e')));
+      }
     } catch (e, stackTrace) {
       debugPrint('❌ GameNotifier.loadLevel: Exception caught');
       debugPrint('   Exception: $e');
@@ -251,6 +256,13 @@ class GameNotifier extends StateNotifier<GameState> {
     if (state.session!.state is VictoryState || state.session!.state is DefeatState) {
       _stopTimer();
 
+      // Player-made boards are free play: victory/defeat screens and lives
+      // behave normally, but nothing is persisted — they're outside the
+      // sequential progression (no unlocks), and recording them would leak
+      // 'custom-…' ids into progress sync and the leaderboards.
+      final isCustomLevel = CustomAwareLevelRepository.isCustomLevelId(
+          state.session!.levelId);
+
       if (state.session!.state is VictoryState) {
         // Haptic feedback for level completed (three strong impacts)
         await _triggerHaptic(() => HapticFeedback.heavyImpact());
@@ -258,6 +270,12 @@ class GameNotifier extends StateNotifier<GameState> {
         await _triggerHaptic(() => HapticFeedback.heavyImpact());
         await Future.delayed(const Duration(milliseconds: 100));
         await _triggerHaptic(() => HapticFeedback.heavyImpact());
+
+        if (isCustomLevel) {
+          state.session!.calculateFinalScore();
+          debugPrint('🧩 GameNotifier: Custom board cleared (free play, not persisted)');
+          return;
+        }
 
         state.session!.calculateFinalScore();
         final progress = state.progress ?? GameProgress(userId: _userId ?? state.session!.levelId);

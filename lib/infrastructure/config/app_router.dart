@@ -11,6 +11,8 @@ import 'package:arrow_maze_cliente_copy/infrastructure/screens/victory_screen.da
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/defeat_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/leaderboard_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/settings_screen.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/screens/boards_screen.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/screens/board_editor_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -41,16 +43,26 @@ class AppRouter {
         builder: (context, state) => const LevelSelectScreen(),
       ),
       GoRoute(
+        path: '/boards',
+        builder: (context, state) => const BoardsScreen(),
+      ),
+      GoRoute(
+        path: '/boards/editor',
+        builder: (context, state) => const BoardEditorScreen(),
+      ),
+      GoRoute(
         path: '/game/:levelId',
         builder: (context, state) {
           final levelId = state.pathParameters['levelId']!;
           final extra = state.extra;
           final difficulty = extra is Map ? extra['difficulty'] as String? : null;
           final levelNumber = extra is Map ? extra['levelNumber'] as int? : null;
+          final title = extra is Map ? extra['title'] as String? : null;
           return GameScreen(
             levelId: levelId,
             difficulty: difficulty,
             levelNumber: levelNumber,
+            title: title,
           );
         },
       ),

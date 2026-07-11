@@ -27,10 +27,15 @@ class GameScreen extends ConsumerStatefulWidget {
   final String? difficulty;
   final int? levelNumber;
 
+  /// Display title override — used by custom (player-made) boards, which
+  /// have a name instead of a sequential level number.
+  final String? title;
+
   const GameScreen({
     required this.levelId,
     this.difficulty,
     this.levelNumber,
+    this.title,
     Key? key,
   }) : super(key: key);
 
@@ -407,9 +412,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     });
 
     final difficultyLabel = _difficultyLabel(l10n);
-    final hudTitle = difficultyLabel.isEmpty
-        ? '${l10n.translate('level')} $_levelNumber'
-        : '${l10n.translate('level')} $_levelNumber · $difficultyLabel';
+    // Custom boards carry their own name; standard levels show "Level N".
+    final baseTitle = widget.title ?? '${l10n.translate('level')} $_levelNumber';
+    final hudTitle =
+        difficultyLabel.isEmpty ? baseTitle : '$baseTitle · $difficultyLabel';
 
     final session = gameState.session;
     final isTimed = session != null && session.isTimedLevel();
