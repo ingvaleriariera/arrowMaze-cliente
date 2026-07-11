@@ -31,15 +31,7 @@ class _Board3DViewportState extends State<Board3DViewport> {
   // exactly where big boards (level 15) used to freeze the raster thread.
   static const double _maxAngle = 1.25;
 
-  /// How far (logical px) the dark underside layer is offset below the
-  /// board — what makes arrows read as thick physical pieces when the
-  /// board is tilted. A plain 2D offset on purpose: the board is
-  /// flat-rasterized before the perspective applies (see below), and
-  /// inside a flat rasterization a true Z translation projects to zero
-  /// pixels — the underside must be baked into the flat image itself.
-  static const double _slabDepth = 10;
-
-  // In 3D mode the board (depth layer included) is ALWAYS shown as a
+  // In 3D mode the board is ALWAYS shown as a
   // flat-rasterized GPU image, and the perspective transform is applied
   // to that image. This is the load-bearing design decision: expensive
   // paint effects (the blur glows on ~116 arrows in level 15) are only
@@ -122,33 +114,7 @@ class _Board3DViewportState extends State<Board3DViewport> {
         child: SnapshotWidget(
           controller: _snapshotController,
           mode: SnapshotMode.permissive,
-          child: Stack(
-            children: [
-              // Depth layer: a recolored copy of the whole board offset
-              // downward, baked into the flat image under the real board.
-              // With the resting tilt applied, every arrow/cell shows this
-              // dark side peeking out underneath, reading as solid
-              // thickness instead of a floating sheet of paper. Never
-              // receives pointer events.
-              Transform.translate(
-                offset: const Offset(0, _slabDepth),
-                child: IgnorePointer(
-                  child: ColorFiltered(
-                    // srcATop repaints every painted pixel in this flat
-                    // side color (chosen to stand out against the near-
-                    // black game background) while leaving transparency
-                    // alone — a uniform silhouette.
-                    colorFilter: const ColorFilter.mode(
-                      Color(0xFF2E2E52),
-                      BlendMode.srcATop,
-                    ),
-                    child: widget.child,
-                  ),
-                ),
-              ),
-              widget.child,
-            ],
-          ),
+          child: widget.child,
         ),
       ),
     );
