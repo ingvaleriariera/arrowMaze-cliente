@@ -103,6 +103,8 @@ class AppLocalizations {
       'buyLife': 'Buy life',
       'lifePurchaseFailed': 'Not enough coins to buy a life',
       'emailOrUsername': 'Email or username',
+      'board3d': '3D board',
+      'board3dDescription': 'View the board in perspective — drag to spin it, long-press to recenter',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -201,6 +203,8 @@ class AppLocalizations {
       'buyLife': 'Comprar vida',
       'lifePurchaseFailed': 'No tienes monedas suficientes para comprar una vida',
       'emailOrUsername': 'Correo o usuario',
+      'board3d': 'Tablero 3D',
+      'board3dDescription': 'Ver el tablero en perspectiva — arrastra para girarlo, mantén presionado para centrarlo',
     },
   };
 

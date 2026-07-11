@@ -38,6 +38,13 @@ class SettingsScreen extends ConsumerWidget {
             value: settingsState.vibrationEnabled,
             onChanged: (_) => settingsNotifier.toggleVibration(),
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.view_in_ar, color: Color(0xFF00F5A0)),
+            title: Text(l10n.translate('board3d')),
+            subtitle: Text(l10n.translate('board3dDescription')),
+            value: settingsState.board3DEnabled,
+            onChanged: (_) => settingsNotifier.toggleBoard3D(),
+          ),
           ListTile(
             title: Text(l10n.translate('language')),
             subtitle: Text(l10n.translate('languageSubtitle')),

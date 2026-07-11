@@ -25,4 +25,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   void toggleVibration() {
     state = state.copyWith(vibrationEnabled: !state.vibrationEnabled);
   }
+
+  void toggleBoard3D() {
+    state = state.copyWith(board3DEnabled: !state.board3DEnabled);
+  }
 }

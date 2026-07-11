@@ -18,6 +18,7 @@ import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_viewport.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/power_up_bar.dart';
 
@@ -570,6 +571,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   final gridWidth = cellSize * cols;
                   final gridHeight = cellSize * rows;
 
+                  // In 3D mode a one-finger drag means "rotate the board",
+                  // so the viewer's own panning is turned off to keep the
+                  // gesture unambiguous; pinch-zoom works in both modes.
+                  final board3D = ref.watch(
+                      settingsNotifierProvider.select((s) => s.board3DEnabled));
+
                   return Container(
                     color: const Color(0xFF0d0d18),
                     child: InteractiveViewer(
@@ -577,10 +584,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
                       maxScale: 3.0,
                       boundaryMargin: const EdgeInsets.all(200),
                       constrained: true,
-                      panEnabled: true,
+                      panEnabled: !board3D,
                       scaleEnabled: true,
                       transformationController: _transformationController,
-                      child: Center(
+                      child: Board3DViewport(
+                        enabled: board3D,
+                        child: Center(
                         child: SizedBox(
                           width: gridWidth,
                           height: gridHeight,
@@ -637,6 +646,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               size: Size(gridWidth, gridHeight),
                             ),
                           ),
+                        ),
                         ),
                       ),
                     ),
