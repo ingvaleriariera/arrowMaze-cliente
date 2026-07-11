@@ -129,26 +129,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           Consumer(builder: (context, ref, _) {
             final livesState = ref.watch(livesNotifierProvider);
             final countdown = livesState.timeUntilNextLife;
-            return Row(
-              children: [
-                Icon(
-                  livesState.canPlay ? Icons.favorite : Icons.heart_broken,
-                  color: const Color(0xFFFF3366),
-                  size: 18,
+            // Tappable: opens the lives dialog, which is also where a
+            // life can be bought with coins before hitting zero.
+            return InkWell(
+              onTap: () => showNoLivesDialog(context),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      livesState.canPlay ? Icons.favorite : Icons.heart_broken,
+                      color: const Color(0xFFFF3366),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${livesState.count}/${PlayerLives.maxLives}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                    if (countdown != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        formatLifeCountdown(countdown),
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '${livesState.count}/${PlayerLives.maxLives}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                if (countdown != null) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    formatLifeCountdown(countdown),
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                ],
-              ],
+              ),
             );
           }),
           const SizedBox(width: 16),

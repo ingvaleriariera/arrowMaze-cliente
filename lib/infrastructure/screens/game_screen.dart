@@ -80,6 +80,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
   // Set right before programmatically popping after the player confirmed
   // leaving mid-run, so PopScope lets that one pop through.
   bool _exitConfirmed = false;
+
+  // One life per defeat, tracked here because the state listener can't
+  // compare against the previous emission: GameSession is mutable, so
+  // previous and next GameState reference the same already-mutated
+  // session and "previous wasn't a defeat yet" is never true.
+  bool _lifeDeductedThisRun = false;
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
   final Map<String, _PendingSmash> _pendingSmashes = {};
@@ -148,6 +154,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
+    _lifeDeductedThisRun = false;
     _resetPowerUpUiState();
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
     gameNotifier.loadLevel(widget.levelId, _currentUserId());
@@ -389,10 +396,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
           context.go('/victory');
         } else if (next.session!.state is DefeatState) {
           debugPrint('💀 GameScreen: Defeat');
-          // Guarded by the previous state so repeated emissions of the
-          // same over-session (e.g. the state copy right after this one)
-          // can never deduct more than one life per defeat.
-          if (previous?.session?.state is! DefeatState) {
+          if (!_lifeDeductedThisRun) {
+            _lifeDeductedThisRun = true;
             ref.read(livesNotifierProvider.notifier).loseLife();
           }
           context.go('/defeat');
@@ -739,6 +744,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   onPressed: () {
                     setState(() {
                       _showPause = false;
+                      _lifeDeductedThisRun = false;
                       _resetPowerUpUiState();
                     });
                     gameNotifier.restart(widget.levelId, _currentUserId());

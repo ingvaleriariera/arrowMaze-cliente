@@ -45,12 +45,25 @@ BASE URL: `http://localhost:3000/api/v1`
 | POST | `/auth/login` | No | `{email, password}` | `{userId, username, token}` |
 | GET | `/levels` | No | — | `{levels: [LevelSummaryDTO]}` |
 | POST | `/scores/submit` | Bearer | `{userId, levelId, score}` | `{accepted, qualifiedForLeaderboard}` |
-| POST | `/progress/sync` | Bearer | `{userId, levels: [LevelProgressDTO]}` | `{levels: [LevelProgressDTO]}` |
+| POST | `/progress/sync` | Bearer | `{userId, levels: [LevelProgressDTO], coins?}` | `{levels: [LevelProgressDTO], coins}` |
 | GET | `/leaderboard/:levelId` | No | — | `{entries: [{rank, username, score, achievedAt}]}` |
+| GET | `/leaderboard/global?limit=N` | No | — | `{entries: [{rank, username, totalScore}]}` |
 
-**NO existen:** `GET /levels/:id`, `GET /leaderboard` (global), `GET /scores/me`
+**NO existen:** `GET /levels/:id`, `GET /scores/me`
 
 **Score:** el más alto gana (BestScoreConflictResolver usa isGreaterThan).
+
+**Monedas:** persisten en el backend vía `progress/sync`. A diferencia de los
+scores, usan last-write-wins (NO pasan por el conflict resolver de máximos,
+porque un saldo gastable baja legítimamente). Enviar el body sin el campo
+`coins` deja el saldo del servidor intacto — `undefined` nunca se trata como 0.
+Temporal para testing: el cliente fuerza el saldo local a 9999 en cada sync
+(ver `game_progress_repository_impl.dart`) hasta que exista economía real de
+ganancia de monedas.
+
+**Leaderboard global:** suma el mejor score por nivel de cada jugador desde
+`PlayerProgress` (NO desde `score_entries`, que es historial append-only y
+contaría los replays dos veces).
 
 ---
 
@@ -93,9 +106,17 @@ El núcleo del juego es un grafo de dependencias entre flechas:
 - Al salir una flecha: se elimina su nodo y se desbloquean las flechas
   que dependían de ella
 
-**Condición de salida:** una flecha puede salir cuando su camino llega al
-borde del tablero O a una celda void. Las celdas void actúan como
-"salidas internas" — esto permite formas irregulares.
+**Condición de salida (regla de void re-entry — IMPORTANTE):** una flecha
+solo sale cuando su rayo llega más allá del borde exterior real del tablero
+(la bounding box de la forma). Los huecos interiores NO son salidas: el
+escaneo de bloqueos atraviesa el hueco, y si hay una flecha del otro lado
+(void re-entry), la flecha está bloqueada por ella — se libera cuando esa
+flecha dispara. Esta regla aplica idéntica en tres lugares que DEBEN estar
+alineados: `BoardGraph.build` (blockedBy), el chequeo al tocar
+(`hasVoidReentry` en PlayingState/GameNotifier), y la generación
+(`BoardBuilder._isActivatable`). Historia: cuando la generación trataba el
+hueco como salida y el juego no, los niveles con formas de anillo (nivel 15)
+salían irresolubles.
 
 **El grafo vive 100% en el cliente — el backend no valida jugadas.**
 
@@ -118,7 +139,47 @@ Las flechas se generan con algoritmo "backward construction":
 - 10% flechas cortas (1-2 segmentos)
 - 50% normales (2-3 segmentos)
 
-**Seed determinístico:** mismo levelId → mismas flechas siempre.
+**Seed determinístico:** mismo levelId → mismas flechas siempre
+(`seed = levelId.hashCode`, ver LoadLevelUseCase).
+
+**Validación de resolubilidad:** cada intento de generación se valida
+simulando una partida completa con la misma regla de activación del juego
+real (incluyendo void re-entry). Las celdas que la generación principal no
+cubre se rellenan con flechas de 1-2 celdas que respetan las mismas
+validaciones (activable + sin cara-a-cara); si la simulación detecta flechas
+atascadas, solo se re-tiran los rellenos (los ciclos siempre involucran
+rellenos — las flechas del bucle principal son resolubles en orden inverso
+por construcción).
+
+---
+
+## Economía y ritmo de juego
+
+**Cronómetro (solo niveles HARD):** presupuesto de 2 segundos por flecha
+generada, con piso de 60 segundos. Calculado en el cliente por
+`PerArrowTimeLimitPolicy` (patrón Strategy detrás del puerto
+`ITimeLimitPolicy`, inyectado en LoadLevelUseCase); si el backend enviara
+`timeLimitSeconds` explícito, ese gana. Al agotarse: derrota `TIME_UP`.
+HUD muestra `m:ss`, en rojo bajo 30s.
+
+**Vidas:**
+- Máximo 5; se pierde 1 por derrota (movimientos/deadlock/tiempo) y también
+  por abandonar un nivel a mitad de partida (ambas salidas — gesto de atrás
+  y botón del overlay de pausa — piden confirmación y avisan del costo).
+- Regeneración: 1 vida cada 20 minutos, calculada lazy desde timestamps
+  persistidos con recuperación acumulada (1 hora fuera = 3 vidas).
+- Compra: 1 vida por 100 monedas (BuyLifeUseCase orquesta monedas + vidas).
+- Con 0 vidas no se puede entrar a ningún nivel: todos los puntos de entrada
+  muestran un diálogo con la cuenta regresiva en vivo y la opción de compra.
+  El contador de corazones del Home es tocable y abre el mismo diálogo.
+- Dominio: entidad inmutable `PlayerLives` (reloj inyectado por parámetro,
+  testeable); almacenamiento en SharedPreferences por usuario —
+  deliberadamente local al dispositivo, fuera del sync del backend y del
+  esquema sqflite del progreso.
+- La deducción por derrota se dispara UNA vez por sesión vía una bandera en
+  GameScreen (`_lifeDeductedThisRun`) — no se puede deducir comparando el
+  estado anterior del listener porque GameSession es mutable y previous/next
+  comparten la misma instancia ya mutada.
 
 ---
 
