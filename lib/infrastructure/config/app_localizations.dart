@@ -102,6 +102,7 @@ class AppLocalizations {
       'noLivesMessage': 'You have no lives left. Wait for the next one or buy one with coins.',
       'buyLife': 'Buy life',
       'lifePurchaseFailed': 'Not enough coins to buy a life',
+      'emailOrUsername': 'Email or username',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -199,6 +200,7 @@ class AppLocalizations {
       'noLivesMessage': 'No te quedan vidas. Espera la próxima o compra una con monedas.',
       'buyLife': 'Comprar vida',
       'lifePurchaseFailed': 'No tienes monedas suficientes para comprar una vida',
+      'emailOrUsername': 'Correo o usuario',
     },
   };
 

@@ -27,6 +27,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.initState();
     _emailOrUsernameController.addListener(_onEmailOrUsernameChanged);
     _passwordController.addListener(_onInputChanged);
+    _prefillSavedEmail();
+  }
+
+  /// Pre-fills the field with the identifier saved for Face ID on this
+  /// device, so a returning user lands with the biometric button already
+  /// enabled (setting the text re-runs validation + the Face ID
+  /// availability check through the controller listener on its own).
+  Future<void> _prefillSavedEmail() async {
+    try {
+      final savedEmail =
+          await ref.read(faceIdLoginWithEmailUseCaseProvider).getSavedEmail();
+      if (!mounted || savedEmail == null) return;
+      // Never clobber something the user already started typing.
+      if (_emailOrUsernameController.text.isNotEmpty) return;
+      _emailOrUsernameController.text = savedEmail;
+    } catch (e) {
+      debugPrint('⚠️  LoginScreen._prefillSavedEmail: $e');
+    }
   }
 
   @override
@@ -146,7 +164,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               controller: _emailOrUsernameController,
               enabled: !authState.isLoading,
               decoration: InputDecoration(
-                labelText: l10n.translate('email'),
+                labelText: l10n.translate('emailOrUsername'),
                 border: OutlineInputBorder(
                   borderSide: BorderSide(
                     color:

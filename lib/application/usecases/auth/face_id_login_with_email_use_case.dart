@@ -18,6 +18,20 @@ class FaceIdLoginWithEmailUseCase {
     return hasSavedCredentials && isFaceIdAvailable;
   }
 
+  /// The identifier saved alongside the biometric credentials on this
+  /// device (or null when nothing is saved) — lets the login screen
+  /// pre-fill the field so a returning Face ID user doesn't retype it.
+  /// Reading it does NOT trigger a biometric prompt; only execute() does.
+  Future<String?> getSavedEmail() async {
+    try {
+      final credentials = await authRepository.getBiometricCredentials();
+      return credentials?.$1;
+    } catch (e) {
+      debugPrint('⚠️  FaceIdLoginWithEmailUseCase.getSavedEmail: $e');
+      return null;
+    }
+  }
+
   Future<dynamic> execute(String email) async {
     try {
       debugPrint('🔐 FaceIdLoginWithEmailUseCase: Starting Face ID login for $email');
