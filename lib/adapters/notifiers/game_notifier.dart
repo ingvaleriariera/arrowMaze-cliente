@@ -76,14 +76,17 @@ class GameNotifier extends StateNotifier<GameState> {
       debugPrint('✅ GameNotifier: LoadLevelUseCase returned session');
       debugPrint('   Session: levelId=${session.levelId}, maxMoves=${session.maxMoves}');
 
-      // Progress is fetched once and then kept in state across level
-      // loads within this session — recordCompletion() on victory needs
-      // it to know which levels are already done.
-      var progress = state.progress;
-      if (progress == null) {
-        progress = await getLocalProgressUseCase.execute(userId) ?? GameProgress(userId: userId);
-        debugPrint('📖 GameNotifier: Loaded progress (${progress.completedLevels.length} completed)');
-      }
+      // Progress is re-fetched on EVERY level load, never kept across
+      // loads: the repository hands back the one shared instance (cheap,
+      // memory-cached), which is also what Home, the lives purchase and
+      // the login sync read/write. Holding a reference across the whole
+      // session instead meant that whenever the cached object was
+      // replaced (re-login sync, account switch), the game kept spending
+      // and showing coins on a stale, disconnected copy — Home showed
+      // the real balance while the in-game counter never updated.
+      final progress = await getLocalProgressUseCase.execute(userId) ??
+          GameProgress(userId: userId);
+      debugPrint('📖 GameNotifier: Loaded progress (${progress.completedLevels.length} completed, ${progress.coins} coins)');
 
       debugPrint('🔄 GameNotifier: Updating state with session');
       state = state.copyWith(
