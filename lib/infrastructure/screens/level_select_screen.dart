@@ -6,6 +6,7 @@ import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/bottom_tab_bar.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/no_lives_dialog.dart';
 
 /// Only ask once per account whether to preload every level's board.
 /// Scoped by userId so logging into a different account gets asked again.
@@ -33,6 +34,10 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
       
       if (userId != null) {
         debugPrint('🎯 LevelSelectScreen: userId=$userId, calling loadSummaries()');
+        // Lives gate the level taps below; normally already loaded by
+        // Home, but load here too so deep entries into this screen
+        // (e.g. defeat -> back to levels) always have fresh state.
+        ref.read(livesNotifierProvider.notifier).load(userId);
         ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId).then((_) {
           _maybeAskToPreloadAll(userId);
         });
@@ -151,6 +156,11 @@ class _LevelSelectScreenState extends ConsumerState<LevelSelectScreen> {
               ? null
               : () {
                   debugPrint('👆 LevelSelectScreen: User tapped level: ${level.levelId}');
+
+                  if (!ref.read(livesNotifierProvider).canPlay) {
+                    showNoLivesDialog(context);
+                    return;
+                  }
 
                   // GameScreen.initState triggers the actual load for this levelId,
                   // so just navigate here to avoid a duplicate loadLevel() call.

@@ -76,6 +76,10 @@ class _PendingSmash {
 class _GameScreenState extends ConsumerState<GameScreen>
     with TickerProviderStateMixin {
   bool _showPause = false;
+
+  // Set right before programmatically popping after the player confirmed
+  // leaving mid-run, so PopScope lets that one pop through.
+  bool _exitConfirmed = false;
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
   final Map<String, _PendingSmash> _pendingSmashes = {};
@@ -385,6 +389,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
           context.go('/victory');
         } else if (next.session!.state is DefeatState) {
           debugPrint('💀 GameScreen: Defeat');
+          // Guarded by the previous state so repeated emissions of the
+          // same over-session (e.g. the state copy right after this one)
+          // can never deduct more than one life per defeat.
+          if (previous?.session?.state is! DefeatState) {
+            ref.read(livesNotifierProvider.notifier).loseLife();
+          }
           context.go('/defeat');
         }
       }
@@ -399,7 +409,27 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final isTimed = session != null && session.isTimedLevel();
     final timeLeft = isTimed ? (session.timeRemaining ?? 0) : 0;
 
-    return Scaffold(
+    // Leaving mid-run counts as a defeat (costs a life), so both exit
+    // routes — the back button/swipe and the pause overlay's menu button —
+    // must go through the confirmation dialog while a session is live.
+    final sessionInProgress =
+        !gameState.isLoading && session != null && !session.isOver();
+
+    return PopScope(
+      canPop: !sessionInProgress || _exitConfirmed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _confirmExit(onConfirmed: () {
+          setState(() => _exitConfirmed = true);
+          // Deferred one frame: PopScope's canPop only picks up
+          // _exitConfirmed after this rebuild, so popping synchronously
+          // here would still be blocked and re-open the dialog.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) context.pop();
+          });
+        });
+      },
+      child: Scaffold(
       appBar: AppBar(
         centerTitle: true,
         title: Column(
@@ -442,6 +472,40 @@ class _GameScreenState extends ConsumerState<GameScreen>
         ],
       ),
       body: _buildBody(gameState, gameNotifier, l10n),
+      ),
+    );
+  }
+
+  /// Shows the leave-the-level confirmation. [onConfirmed] runs after the
+  /// life has been deducted; the caller decides how to actually navigate
+  /// (pop for the back gesture, go('/levels') for the pause overlay).
+  void _confirmExit({required VoidCallback onConfirmed}) {
+    final l10n = AppLocalizations.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        title: Text(l10n.translate('exitLevelTitle')),
+        content: Text(l10n.translate('exitLevelMessage')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.translate('keepPlaying')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              ref.read(livesNotifierProvider.notifier).loseLife();
+              onConfirmed();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3366),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(l10n.translate('leaveAnyway')),
+          ),
+        ],
+      ),
     );
   }
 
@@ -684,7 +748,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton(
-                  onPressed: () => context.go('/levels'),
+                  onPressed: () => _confirmExit(
+                    onConfirmed: () => context.go('/levels'),
+                  ),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
                   child: Text(l10n.translate('backToMenu')),
                 ),

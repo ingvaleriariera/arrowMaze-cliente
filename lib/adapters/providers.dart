@@ -45,6 +45,13 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progr
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/sync_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_time_limit_policy.dart';
 import 'package:arrow_maze_cliente_copy/domain/services/per_arrow_time_limit_policy.dart';
+import 'package:arrow_maze_cliente_copy/adapters/notifiers/lives_notifier.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/lives_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/state/lives_state.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/lives/buy_life_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/lives/get_lives_use_case.dart';
+import 'package:arrow_maze_cliente_copy/application/usecases/lives/lose_life_use_case.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_lives_repository.dart';
 
 // API
 final apiClientProvider = Provider((ref) => ApiClient(
@@ -207,6 +214,31 @@ final levelSelectNotifierProvider = StateNotifierProvider<LevelSelectNotifier, L
   LevelSelectNotifier(
     getLevelSummariesUseCase: ref.watch(getLevelSummariesUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
+  )
+);
+
+// Lives
+final livesRepositoryProvider =
+    Provider<ILivesRepository>((ref) => LivesRepositoryImpl());
+
+final getLivesUseCaseProvider = Provider((ref) => GetLivesUseCase(
+  livesRepository: ref.watch(livesRepositoryProvider),
+));
+
+final loseLifeUseCaseProvider = Provider((ref) => LoseLifeUseCase(
+  livesRepository: ref.watch(livesRepositoryProvider),
+));
+
+final buyLifeUseCaseProvider = Provider((ref) => BuyLifeUseCase(
+  livesRepository: ref.watch(livesRepositoryProvider),
+  progressRepository: ref.watch(gameProgressRepositoryProvider),
+));
+
+final livesNotifierProvider = StateNotifierProvider<LivesNotifier, LivesState>((ref) =>
+  LivesNotifier(
+    getLivesUseCase: ref.watch(getLivesUseCaseProvider),
+    loseLifeUseCase: ref.watch(loseLifeUseCaseProvider),
+    buyLifeUseCase: ref.watch(buyLifeUseCaseProvider),
   )
 );
 

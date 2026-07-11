@@ -5,8 +5,10 @@ import 'package:arrow_maze_cliente_copy/adapters/providers.dart';
 import 'package:arrow_maze_cliente_copy/application/dtos/level_summary_dto.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/player_lives.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/bottom_tab_bar.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/arrow_showcase.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/no_lives_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -42,6 +44,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     if (userId == null) return;
 
     final progress = await ref.read(getLocalProgressUseCaseProvider).execute(userId);
+    await ref.read(livesNotifierProvider.notifier).load(userId);
     await ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId);
     if (!mounted) return;
     setState(() {
@@ -64,6 +67,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 
   void _playCurrentLevel(LevelSummaryDTO level, int number) {
+    if (!ref.read(livesNotifierProvider).canPlay) {
+      showNoLivesDialog(context);
+      return;
+    }
     context.push('/game/${level.levelId}', extra: {
       'difficulty': level.difficulty,
       'levelNumber': number,
@@ -119,10 +126,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             onPressed: () => context.push('/settings'),
           ),
           const SizedBox(width: 4),
-          // Decorative for now — no lives economy implemented yet.
-          const Icon(Icons.favorite, color: Color(0xFFFF3366), size: 18),
-          const SizedBox(width: 4),
-          const Text('5/5', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          Consumer(builder: (context, ref, _) {
+            final livesState = ref.watch(livesNotifierProvider);
+            final countdown = livesState.timeUntilNextLife;
+            return Row(
+              children: [
+                Icon(
+                  livesState.canPlay ? Icons.favorite : Icons.heart_broken,
+                  color: const Color(0xFFFF3366),
+                  size: 18,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${livesState.count}/${PlayerLives.maxLives}',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                if (countdown != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    formatLifeCountdown(countdown),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ],
+              ],
+            );
+          }),
           const SizedBox(width: 16),
           _isLoading
               ? const SizedBox(
