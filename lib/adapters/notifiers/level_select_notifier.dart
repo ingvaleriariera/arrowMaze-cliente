@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_aware_level_repository.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/level_select_state.dart';
 import 'package:arrow_maze_cliente_copy/application/dtos/level_summary_dto.dart';
+import 'package:arrow_maze_cliente_copy/application/ports/i_audio_service.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/manage_my_boards_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/get_level_summaries_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/preload_levels_use_case.dart';
@@ -11,11 +12,13 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
   final GetLevelSummariesUseCase getLevelSummariesUseCase;
   final PreloadLevelsUseCase preloadLevelsUseCase;
   final ManageMyBoardsUseCase manageMyBoardsUseCase;
+  final IAudioService audioService;
 
   LevelSelectNotifier({
     required this.getLevelSummariesUseCase,
     required this.preloadLevelsUseCase,
     required this.manageMyBoardsUseCase,
+    required this.audioService,
   }) : super(const LevelSelectState());
 
   Future<void> loadSummaries(String userId) async {
@@ -64,6 +67,12 @@ class LevelSelectNotifier extends StateNotifier<LevelSelectState> {
         isLoading: false,
       );
       debugPrint('✅ LevelSelectNotifier: State updated successfully');
+
+      // Start background music for the level select menu
+      debugPrint('🎵 LevelSelectNotifier: Starting background music for menu');
+      audioService.playMusic('Pyromania').catchError((e) {
+        debugPrint('⚠️  LevelSelectNotifier: Failed to start background music - $e');
+      });
     } catch (e, stackTrace) {
       debugPrint('❌ LevelSelectNotifier: Error caught in loadSummaries');
       debugPrint('   Exception: $e');

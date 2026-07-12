@@ -4,6 +4,7 @@ import 'package:arrow_maze_cliente_copy/adapters/api/api_client.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/locale_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/level_mapper.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/progress_mapper.dart';
+import 'package:arrow_maze_cliente_copy/adapters/observers/audio_observer.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/api_config.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/auth_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/game_notifier.dart';
@@ -108,6 +109,11 @@ final scoreRepositoryProvider = Provider((ref) => ScoreRepositoryImpl(
 ));
 
 final audioServiceProvider = Provider((ref) => AudioServiceImpl());
+
+// Observer that responds to game events with audio effects and music
+final audioObserverProvider = Provider((ref) => AudioObserver(
+  ref.watch(audioServiceProvider),
+));
 
 final biometricServiceProvider = Provider((ref) => BiometricService());
 
@@ -217,6 +223,8 @@ final gameNotifierProvider = StateNotifierProvider<GameNotifier, GameState>((ref
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
     submitScoreUseCase: ref.watch(submitScoreUseCaseProvider),
     getVibrationEnabled: () => ref.read(settingsNotifierProvider).vibrationEnabled,
+    audioObserver: ref.watch(audioObserverProvider),
+    audioService: ref.watch(audioServiceProvider),
   )
 );
 
@@ -236,6 +244,7 @@ final levelSelectNotifierProvider = StateNotifierProvider<LevelSelectNotifier, L
     getLevelSummariesUseCase: ref.watch(getLevelSummariesUseCaseProvider),
     preloadLevelsUseCase: ref.watch(preloadLevelsUseCaseProvider),
     manageMyBoardsUseCase: ref.watch(manageMyBoardsUseCaseProvider),
+    audioService: ref.watch(audioServiceProvider),
   )
 );
 

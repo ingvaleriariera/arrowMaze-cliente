@@ -1,4 +1,5 @@
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_game_observer.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
@@ -20,6 +21,9 @@ class GameSession {
 
   IGameState _state;
 
+  // Observer pattern: Subject (GameSession) notifies these observers
+  final List<IGameObserver> _observers = [];
+
   GameSession({
     required this.board,
     required this.levelId,
@@ -30,33 +34,76 @@ class GameSession {
 
   IGameState get state => _state;
 
+  // Observer management (Subject interface)
+  void addObserver(IGameObserver observer) {
+    if (!_observers.contains(observer)) {
+      _observers.add(observer);
+    }
+  }
+
+  void removeObserver(IGameObserver observer) {
+    _observers.remove(observer);
+  }
+
+  // Private notification methods (Observer pattern dispatch)
+  void _notifyPlayerMoved(MoveResult result) {
+    for (final observer in _observers) {
+      observer.onPlayerMoved(result);
+    }
+  }
+
+  void _notifyScoreUpdated() {
+    for (final observer in _observers) {
+      observer.onScoreUpdated(score);
+    }
+  }
+
+  void _notifyLevelCompleted(bool success) {
+    for (final observer in _observers) {
+      observer.onLevelCompleted(success, score);
+    }
+  }
+
   MoveResult executeMove(String arrowId) {
     final result = _state.handle(arrowId, board);
 
     if (result.success) {
       moves++;
+      final previousScore = score;
       score += 10 * result.exitedSegments.length;
+
+      // Notify player moved (regardless of score change, as board state changed)
+      _notifyPlayerMoved(result);
+
+      // Notify score updated if score actually changed
+      if (score != previousScore) {
+        _notifyScoreUpdated();
+      }
 
       // Check for victory
       if (board.isEmpty()) {
         _state = VictoryState();
+        _notifyLevelCompleted(true);
         return result;
       }
 
       // Check for deadlock (no activatable arrows)
       if (board.getActivatableArrows().isEmpty) {
         _state = DefeatState(reason: 'DEADLOCK');
+        _notifyLevelCompleted(false);
         return result;
       }
 
       // Check for defeat by moves
       if (moves >= maxMoves) {
         _state = DefeatState(reason: 'OUT_OF_MOVES');
+        _notifyLevelCompleted(false);
         return result;
       }
     } else {
       // Failed move
       failedMoves++;
+      _notifyPlayerMoved(result);
     }
 
     return result;
@@ -68,6 +115,7 @@ class GameSession {
     // Check for defeat by moves after deducting move
     if (moves >= maxMoves) {
       _state = DefeatState(reason: 'OUT_OF_MOVES');
+      _notifyLevelCompleted(false);
     }
   }
 
@@ -88,6 +136,7 @@ class GameSession {
       timeRemaining = timeRemaining! - 1;
       if (timeRemaining! <= 0) {
         _state = DefeatState(reason: 'TIME_UP');
+        _notifyLevelCompleted(false);
       }
     }
   }
@@ -102,8 +151,10 @@ class GameSession {
     if (result.success) {
       if (board.isEmpty()) {
         _state = VictoryState();
+        _notifyLevelCompleted(true);
       } else if (board.getActivatableArrows().isEmpty) {
         _state = DefeatState(reason: 'DEADLOCK');
+        _notifyLevelCompleted(false);
       }
     }
 

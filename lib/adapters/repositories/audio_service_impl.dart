@@ -1,75 +1,146 @@
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_maze_cliente_copy/application/ports/i_audio_service.dart';
 
+/// Singleton audio service implementation using just_audio.
+/// Manages two separate AudioPlayers:
+/// - _musicPlayer: background music with looping
+/// - _effectsPlayer: one-shot sound effects
+///
+/// Ensures mute state applies to both players simultaneously.
 class AudioServiceImpl implements IAudioService {
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  final AudioPlayer _musicPlayer = AudioPlayer();
-  late SharedPreferences _prefs;
+  // Singleton pattern
+  static final AudioServiceImpl _instance = AudioServiceImpl._internal();
 
-  static const String _muteKey = 'audio_muted';
-
-  bool _isMuted = false;
-
-  AudioServiceImpl({SharedPreferences? prefs}) {
-    if (prefs != null) {
-      _prefs = prefs;
-      _isMuted = prefs.getBool(_muteKey) ?? false;
-    }
+  factory AudioServiceImpl() {
+    return _instance;
   }
 
-  Future<void> initialize(SharedPreferences prefs) async {
-    _prefs = prefs;
-    _isMuted = prefs.getBool(_muteKey) ?? false;
+  AudioServiceImpl._internal();
+
+  // Audio players: separate instances for music and effects
+  late final AudioPlayer _musicPlayer = AudioPlayer();
+  late final AudioPlayer _effectsPlayer = AudioPlayer();
+
+  // Mute state (in-memory; persisted to SharedPreferences in a future phase)
+  bool _isMuted = false;
+  String? _currentMusicTrack;
+
+  /// Get the asset path for a given sound identifier.
+  String _getAssetPath(String sound) {
+    return 'assets/audio/$sound.mp3';
   }
 
   @override
   Future<void> playEffect(String sound) async {
-    if (_isMuted) return;
+    if (_isMuted) {
+      debugPrint('🔇 AudioServiceImpl: Effect "$sound" blocked (muted)');
+      return;
+    }
+
     try {
-      // In a real app, map sound names to actual files
-      // For now, this is a no-op since we don't have actual audio files
+      debugPrint('🔊 AudioServiceImpl: Playing effect "$sound"');
+      final assetPath = _getAssetPath(sound);
+
+      // Stop any currently playing effect first
+      await _effectsPlayer.stop();
+
+      // Set effect player to NOT loop
+      await _effectsPlayer.setLoopMode(LoopMode.off);
+
+      // Set lower volume for effects (e.g., 0.8) to not overwhelm music
+      await _effectsPlayer.setVolume(0.8);
+
+      // Load and play the effect asset
+      await _effectsPlayer.setAsset(assetPath);
+      await _effectsPlayer.play();
+
+      debugPrint('✅ AudioServiceImpl: Effect "$sound" started');
     } catch (e) {
-      print('Error playing effect: $e');
+      debugPrint('❌ AudioServiceImpl.playEffect: Error playing "$sound" - $e');
     }
   }
 
   @override
   Future<void> playMusic(String track) async {
-    if (_isMuted) return;
+    if (_isMuted) {
+      debugPrint('🔇 AudioServiceImpl: Music "$track" blocked (muted)');
+      return;
+    }
+
     try {
-      // In a real app, play music file and set looping
+      // If the same track is already playing, do nothing
+      if (_currentMusicTrack == track) {
+        debugPrint('ℹ️  AudioServiceImpl: Music "$track" already playing, skipping');
+        return;
+      }
+
+      debugPrint('🎵 AudioServiceImpl: Playing music "$track"');
+      final assetPath = _getAssetPath(track);
+
+      // Stop current music first if something is playing
+      if (_currentMusicTrack != null) {
+        await _musicPlayer.stop();
+      }
+
+      // Set music player to LOOP
       await _musicPlayer.setLoopMode(LoopMode.one);
+
+      // Set higher volume for background music (e.g., 1.0)
+      await _musicPlayer.setVolume(1.0);
+
+      // Load and play the music asset
+      await _musicPlayer.setAsset(assetPath);
+      await _musicPlayer.play();
+
+      _currentMusicTrack = track;
+
+      debugPrint('✅ AudioServiceImpl: Music "$track" started (looping)');
     } catch (e) {
-      print('Error playing music: $e');
+      debugPrint('❌ AudioServiceImpl.playMusic: Error playing "$track" - $e');
     }
   }
 
   @override
   Future<void> stopMusic() async {
     try {
+      debugPrint('⏹️  AudioServiceImpl: Stopping music');
       await _musicPlayer.stop();
+      _currentMusicTrack = null;
+      debugPrint('✅ AudioServiceImpl: Music stopped');
     } catch (e) {
-      print('Error stopping music: $e');
+      debugPrint('❌ AudioServiceImpl.stopMusic: Error - $e');
     }
   }
 
   @override
   void mute() {
+    if (_isMuted) return; // Already muted
     _isMuted = true;
-    if (_prefs != null) {
-      _prefs.setBool(_muteKey, true);
-    }
+    debugPrint('🔇 AudioServiceImpl: Muted');
+
+    // Set volume to 0 for both players
+    _musicPlayer.setVolume(0.0);
+    _effectsPlayer.setVolume(0.0);
   }
 
   @override
   void unmute() {
+    if (!_isMuted) return; // Already unmuted
     _isMuted = false;
-    if (_prefs != null) {
-      _prefs.setBool(_muteKey, false);
-    }
+    debugPrint('🔊 AudioServiceImpl: Unmuted');
+
+    // Restore volumes for both players
+    _musicPlayer.setVolume(1.0);
+    _effectsPlayer.setVolume(0.8);
   }
 
   @override
   bool isMuted() => _isMuted;
+
+  /// Dispose resources. Call this during app shutdown.
+  Future<void> dispose() async {
+    await _musicPlayer.dispose();
+    await _effectsPlayer.dispose();
+  }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/custom_aware_level_repository.dart';
 import 'package:arrow_maze_cliente_copy/adapters/state/game_state.dart';
+import 'package:arrow_maze_cliente_copy/application/ports/i_audio_service.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/activate_arrow_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/load_level_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/game/pause_level_use_case.dart';
@@ -15,6 +16,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/progress/get_local_
 import 'package:arrow_maze_cliente_copy/application/usecases/progress/save_progress_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/score/submit_score_use_case.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
+import 'package:arrow_maze_cliente_copy/domain/ports/i_game_observer.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up.dart';
 import 'package:arrow_maze_cliente_copy/domain/powerups/power_up_result.dart';
 import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
@@ -33,6 +35,8 @@ class GameNotifier extends StateNotifier<GameState> {
   final PreloadLevelsUseCase preloadLevelsUseCase;
   final SubmitScoreUseCase submitScoreUseCase;
   final bool Function() getVibrationEnabled;
+  final IGameObserver audioObserver;
+  final IAudioService audioService;
 
   Timer? _timer;
   String? _userId;
@@ -49,6 +53,8 @@ class GameNotifier extends StateNotifier<GameState> {
     required this.preloadLevelsUseCase,
     required this.submitScoreUseCase,
     required this.getVibrationEnabled,
+    required this.audioObserver,
+    required this.audioService,
   }) : super(const GameState());
 
   Future<void> _triggerHaptic(Future<void> Function() hapticCall) async {
@@ -76,6 +82,16 @@ class GameNotifier extends StateNotifier<GameState> {
 
       debugPrint('✅ GameNotifier: LoadLevelUseCase returned session');
       debugPrint('   Session: levelId=${session.levelId}, maxMoves=${session.maxMoves}');
+
+      // Subscribe audio observer to session so it can respond to game events
+      debugPrint('🎵 GameNotifier: Subscribing audioObserver to session');
+      session.addObserver(audioObserver);
+
+      // Start background music for the level
+      debugPrint('🎵 GameNotifier: Starting background music');
+      audioService.playMusic('Pyromania').catchError((e) {
+        debugPrint('⚠️  GameNotifier: Failed to start background music - $e');
+      });
 
       // Progress is re-fetched on EVERY level load, never kept across
       // loads: the repository hands back the one shared instance (cheap,
@@ -377,6 +393,11 @@ class GameNotifier extends StateNotifier<GameState> {
   @override
   void dispose() {
     _stopTimer();
+    // Unsubscribe observer to prevent memory leaks
+    if (state.session != null) {
+      state.session!.removeObserver(audioObserver);
+      debugPrint('🎵 GameNotifier.dispose: Removed audioObserver from session');
+    }
     super.dispose();
   }
 }

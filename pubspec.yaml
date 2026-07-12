@@ -28,3 +28,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/audio/Pyromania.mp3
+    - assets/audio/success.mp3
+    - assets/audio/fiasco.mp3
