@@ -42,12 +42,15 @@ BASE URL: `http://localhost:3000/api/v1`
 | Método | Endpoint | Auth | Body | Respuesta |
 |--------|----------|------|------|-----------|
 | POST | `/auth/register` | No | `{email, username, password}` | `{userId, username, token}` |
-| POST | `/auth/login` | No | `{email, password}` | `{userId, username, token}` |
+| POST | `/auth/login` | No | `{email, password}` — el campo `email` acepta correo O username (se resuelve por presencia de `@`) | `{userId, username, token}` |
 | GET | `/levels` | No | — | `{levels: [LevelSummaryDTO]}` |
 | POST | `/scores/submit` | Bearer | `{userId, levelId, score}` | `{accepted, qualifiedForLeaderboard}` |
 | POST | `/progress/sync` | Bearer | `{userId, levels: [LevelProgressDTO], coins?}` | `{levels: [LevelProgressDTO], coins}` |
 | GET | `/leaderboard/:levelId` | No | — | `{entries: [{rank, username, score, achievedAt}]}` |
 | GET | `/leaderboard/global?limit=N` | No | — | `{entries: [{rank, username, totalScore}]}` |
+| POST | `/custom-boards` | Bearer | `{name, difficulty, boardLayout}` (autor sale del JWT) | `{id, name, authorId, authorUsername, difficulty, boardLayout, createdAt}` |
+| GET | `/custom-boards?limit=N` | No | — | `{boards: [CustomBoardHttpDTO]}` (más nuevos primero) |
+| DELETE | `/custom-boards/:id` | Bearer | — | 204 (403 si no eres el autor, 404 si no existe) |
 
 **NO existen:** `GET /levels/:id`, `GET /scores/me`
 
@@ -57,9 +60,15 @@ BASE URL: `http://localhost:3000/api/v1`
 scores, usan last-write-wins (NO pasan por el conflict resolver de máximos,
 porque un saldo gastable baja legítimamente). Enviar el body sin el campo
 `coins` deja el saldo del servidor intacto — `undefined` nunca se trata como 0.
-Temporal para testing: el cliente fuerza el saldo local a 9999 en cada sync
-(ver `game_progress_repository_impl.dart`) hasta que exista economía real de
-ganancia de monedas.
+En el cliente, el sync toma max(local, servidor) como protección contra
+pérdida de saldo (ver `game_progress_repository_impl.dart`).
+
+**Economía de monedas (ganancia):** al completar un nivel por PRIMERA vez se
+gana el score completo en monedas; al repetir un nivel ya completado se gana
+el 25% del score (`GameProgress.replayCoinFactor`) — toda victoria paga algo
+sin hacer trivial el farmeo. Se gastan en power-ups (in-game) y en vidas
+(100 monedas por vida). Las cuentas nuevas arrancan con el saldo definido en
+`game-economy.constants.ts` del backend.
 
 **Leaderboard global:** suma el mejor score por nivel de cada jugador desde
 `PlayerProgress` (NO desde `score_entries`, que es historial append-only y
@@ -132,12 +141,13 @@ Las flechas se generan con algoritmo "backward construction":
 4. Si es activable → la agrega y marca esas celdas como ocupadas
 5. El orden inverso de construcción = solución garantizada
 
-**Distribución de flechas:**
-- Cobertura: 50-60% de celdas válidas
-- 20% flechas largas (4-5 segmentos)
-- 20% flechas medianas (3 segmentos)
-- 10% flechas cortas (1-2 segmentos)
-- 50% normales (2-3 segmentos)
+**Distribución de flechas (ver `_pickArrowLength` en BoardBuilder):**
+- Cobertura: TODAS las celdas válidas terminan cubiertas (las que la
+  generación principal no logra cubrir se rellenan con flechas de 1-2 celdas)
+- 20% largas (8-15 segmentos, solo en tableros de lado ≥7)
+- 33% medianas (4-7 segmentos)
+- 33% cortas (2-3 segmentos)
+- 14% de una celda
 
 **Seed determinístico:** mismo levelId → mismas flechas siempre
 (`seed = levelId.hashCode`, ver LoadLevelUseCase).
@@ -183,6 +193,71 @@ HUD muestra `m:ss`, en rojo bajo 30s.
 
 ---
 
+## Tableros de la comunidad (editor de niveles)
+
+Los jugadores diseñan y comparten sus propias FORMAS de tablero. Acceso:
+ícono de lápiz en el Home → pantalla con pestañas Comunidad/Míos + botón
+"Crear tablero".
+
+**Editor (`board_editor_screen.dart`):** se elige un tamaño (8×8, 12×12 o
+16×16), y se "dibuja" la forma en un lienzo de puntos: tocar o arrastrar
+pinta/borra celdas (el arrastre pinta o borra según la primera celda tocada,
+para que un trazo sea consistente). Se pone nombre y dificultad y se publica.
+
+**Reglas de un tablero válido (validadas en el agregado `CustomBoard` del
+backend, y espejadas en el editor):**
+- Grid rectangular de 0s y 1s, entre 3 y 20 por lado
+- Mínimo 10 celdas activas
+- Nombre de 3 a 30 caracteres
+- Solo el autor puede eliminarlo de la comunidad (verificado por JWT)
+
+**Qué se guarda:** SOLO la forma (tabla `custom_boards` en PostgreSQL:
+autor, nombre, dificultad, grid JSON, fecha). Las flechas NUNCA viajan —
+cada cliente las genera con seed determinístico derivado del id del tablero,
+así todos los que adopten el mismo tablero ven las mismas flechas.
+
+**Adopción y juego:** "Agregar" guarda una copia local del tablero
+(SharedPreferences, `MyBoardsRepositoryImpl`) — jugable incluso offline.
+Los adoptados aparecen al final del grid de selección de niveles (borde
+cian, ícono de lápiz, nombre del tablero) y se juegan por el pipeline normal
+gracias a `CustomAwareLevelRepository` (patrón Decorator sobre
+`ILevelRepository`): los ids con prefijo `custom-` se resuelven de la lista
+local y se adaptan a un `Level` normal — el pipeline de juego no distingue
+tableros de jugadores de niveles del seeder.
+
+**Juego libre:** los tableros custom no tocan progresión, desbloqueos,
+sync ni leaderboards (guard en `GameNotifier._handleSessionOverIfNeeded` y
+en el preload de "siguientes niveles"). Vidas y victoria/derrota funcionan
+normal. Los HARD custom heredan el cronómetro automáticamente (misma
+política por dificultad). El botón Jugar del Home ignora los custom al
+calcular el "nivel actual".
+
+**Vistas previas baratas:** `BoardShapePreview` pinta el grid como puntitos
+(sin flechas, sin generación) — las listas de comunidad escalan sin costo.
+
+---
+
+## Modo 3D del tablero
+
+Toggle "Tablero 3D" en Configuración (`board3DEnabled` en SettingsState).
+Activo, `Board3DViewport` proyecta el tablero en perspectiva: arrastre
+horizontal lo gira (eje Y), vertical lo inclina (eje X), mantener presionado
+lo recentra; pinch-zoom sigue funcionando. Ángulos acotados a ~72°.
+
+**Decisión de rendimiento (crítica):** el tablero SIEMPRE se rasteriza en
+plano a una imagen GPU (`SnapshotWidget`) y la perspectiva se aplica a esa
+imagen; la imagen se refresca cuando cambia el estado del juego (moves,
+flashes, ticks). Rasterizar los blurs del painter A TRAVÉS de la matriz de
+perspectiva (el enfoque ingenuo) asigna buffers offscreen gigantes en
+tableros grandes y congela el hilo de raster — el nivel 15 colgaba la app
+entera. No revertir este diseño.
+
+**Es 100% capa de presentación:** dominio, casos de uso y backend no saben
+que existe. El renderer plano sigue siendo el default; el toggle elige la
+estrategia en runtime.
+
+---
+
 ## Requisitos Funcionales
 
 | # | Requisito | Estado |
@@ -205,6 +280,12 @@ HUD muestra `m:ss`, en rojo bajo 30s.
 | RF16 | Animación de salida de flechas (efecto gusano) | ⏳ |
 | RF17 | Efectos de sonido y música, opción de silenciar | ✅ |
 | RF18 | Soporte español e inglés (i18n) | ✅ |
+| RF19 | Clasificación global (suma de mejores scores) con podio top 3 | ✅ |
+| RF20 | Pantalla de inicio, perfil con avatar local y navegación con atrás | ✅ |
+| RF21 | Sistema de vidas: 5 máx, regeneración 20 min, compra con monedas | ✅ |
+| RF22 | Login con usuario o correo; prellenado con credenciales de Face ID | ✅ |
+| RF23 | Editor de tableros + tableros de la comunidad (crear/adoptar/eliminar) | ✅ |
+| RF24 | Modo 3D del tablero (toggle, rotación con perspectiva) | ✅ |
 
 ---
 
@@ -221,6 +302,94 @@ HUD muestra `m:ss`, en rojo bajo 30s.
 | RNF07 | Pruebas unitarias |
 | RNF08 | Conventional Commits en inglés |
 | RNF09 | AI_USAGE.md documentando uso de IA |
+
+---
+
+## Módulos del sistema
+
+**Backend (NestJS — un módulo por contexto, registrados en `app.module.ts`):**
+
+| Módulo | Responsabilidad | Piezas clave |
+|--------|-----------------|--------------|
+| Auth | Registro, login (email o username), JWT | `LoginUserUseCase`, `JwtAuthGuard`, `JwtTokenProviderImpl`; exporta `USER_REPOSITORY` |
+| Level | Niveles estándar seeded | `LevelDefinition` (agregado), `DatabaseSeeder` (upsert al arrancar) |
+| Progress | Progreso sincronizado + monedas | `PlayerProgress` (agregado), `SyncProgressUseCase`, `BestScoreConflictResolver` |
+| Score | Historial de scores (append-only) | `SubmitScoreUseCase`, tabla `score_entries` |
+| Leaderboard | Clasificación por nivel y global | `GetLeaderboardUseCase`, `GetGlobalLeaderboardUseCase` |
+| CustomBoard | Tableros de jugadores | `CustomBoard` (agregado con validación de grid), create/list/delete use cases |
+
+Transversales (AOP): `LoggingInterceptor` (APP_INTERCEPTOR) y
+`HttpExceptionFilter` (APP_FILTER).
+
+**Cliente (Flutter — 4 capas, dependencias solo hacia adentro):**
+
+| Capa | Contenido |
+|------|-----------|
+| `domain/` | Entidades (Board, GameSession, GameProgress, PlayerLives), value objects (Direction, Position, TimeLimit…), builders (BoardBuilder), grafo (BoardGraph), estados del juego (State pattern), power-ups, puertos del dominio |
+| `application/` | Casos de uso (auth, game, progress, lives, boards, leaderboard, score), DTOs, puertos de aplicación |
+| `adapters/` | Repositorios (API/sqflite/SharedPreferences), mappers, notifiers Riverpod + estados, ApiClient |
+| `infrastructure/` | Pantallas, widgets, painters, router (GoRouter), i18n, interceptores HTTP, servicios de plataforma (biometría, audio) |
+
+---
+
+## Principios y patrones que cumple el proyecto
+
+**Arquitectura por capas (RNF01):** ambas apps tienen 4 capas con la regla
+de dependencia hacia adentro: el dominio no importa nada de las otras capas;
+la aplicación solo conoce dominio; adapters implementa los puertos; la
+infraestructura está en el borde. El dominio del juego (grafo, generador,
+reglas) no sabe que existen Flutter, HTTP ni SQL.
+
+**Inversión de dependencias (la D de SOLID):** los casos de uso dependen de
+ABSTRACCIONES (puertos) y las implementaciones se inyectan desde afuera:
+- Backend: interfaces + tokens de NestJS (`IConflictResolver`/`CONFLICT_RESOLVER`,
+  `ICustomBoardRepository`/`CUSTOM_BOARD_REPOSITORY`, `IUserRepository`…),
+  cableados en los módulos con `{provide, useClass}`.
+- Cliente: puertos abstractos (`ILevelRepository`, `IGameProgressRepository`,
+  `ILivesRepository`, `ITimeLimitPolicy`, `ICustomBoardRepository`…) cableados
+  en `providers.dart` (Riverpod actúa como contenedor de DI); los providers se
+  tipan con la interfaz, no con la clase concreta.
+
+**Resto de SOLID:**
+- **S**: un caso de uso = una operación (LoseLifeUseCase, SubmitScoreUseCase…);
+  notifiers como único dueño de su estado (LivesNotifier posee toda mutación
+  de vidas).
+- **O**: nuevas reglas sin tocar consumidores — otra política de tiempo es una
+  clase nueva detrás de `ITimeLimitPolicy`; el modo 3D se agregó sin tocar el
+  pipeline de juego; los tableros custom entraron por un decorator sin
+  modificar LoadLevelUseCase.
+- **L**: cualquier implementación de un puerto es sustituible (los tests
+  sustituyen repos reales por fakes en memoria sin tocar los casos de uso).
+- **I**: puertos chicos y específicos (ILivesRepository ≠ IGameProgressRepository;
+  IScoreRepository con un solo método).
+
+**Patrones GoF en uso:**
+
+| Patrón | Dónde |
+|--------|-------|
+| Strategy | `BestScoreConflictResolver` (resolución de conflictos de score), `PerArrowTimeLimitPolicy` (cronómetro), power-ups (`PowerUp` con Hint/Grid/Hammer/Magnet), renderer 2D/plano vs `Board3DViewport` elegido en runtime |
+| State | `IGameState` con PlayingState/PausedState/VictoryState/DefeatState — GameSession delega el manejo de jugadas al estado actual |
+| Decorator | `CustomAwareLevelRepository` envuelve el repo de niveles y agrega resolución de tableros custom sin que el pipeline lo note |
+| Builder | `BoardBuilder` (construcción del tablero con generación), `LevelConfigBuilder` (backend) |
+| Repository | Todos los accesos a datos, detrás de puertos en ambas apps |
+| Factory Method | Los value objects (`Score.create`, `Difficulty.create`, `TimeLimit.of`…) validan en la creación — no existen instancias inválidas |
+| Observer | Riverpod StateNotifier: las pantallas observan estado y reaccionan (`ref.watch`/`ref.listen`) |
+| Singleton | `GameProgressDatabase` (una conexión sqflite por proceso) |
+
+**DDD táctico (backend):** agregados (`PlayerProgress`, `CustomBoard`,
+`LevelDefinition`, `User`) con constructores privados + `create`/`reconstitute`,
+value objects inmutables con validación propia, y las reglas de negocio DENTRO
+del agregado (p. ej. la validación del grid vive en `CustomBoard.create`, no
+en el controller).
+
+**AOP (RNF04):** `LoggingInterceptor` y `HttpExceptionFilter` globales en el
+backend — logging y manejo de errores como aspectos transversales, fuera de
+la lógica de negocio.
+
+**Testabilidad por diseño:** el reloj se inyecta por parámetro
+(`PlayerLives.regenerated(now)`), los casos de uso reciben puertos mockeables,
+y la resolubilidad de la generación se prueba con la MISMA regla de activación
+del juego real.
 
 ---
 
