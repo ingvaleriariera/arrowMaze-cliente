@@ -18,6 +18,7 @@ import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_layered_view.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_viewport.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_projection.dart';
@@ -574,10 +575,83 @@ class _GameScreenState extends ConsumerState<GameScreen>
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // Cascade view (3D game): the canvas grows by the layer
-                  // offsets, so the cell size shrinks just enough for the
-                  // whole stack to fit the width.
                   final maxZ = board.shape.maxZ();
+                  final board3D = ref.watch(
+                      settingsNotifierProvider.select((s) => s.board3DEnabled));
+
+                  // ── True 3D layered view ────────────────────────────────
+                  // When perspective (board3D) AND the 4-layer game (maxZ>0)
+                  // are both active, each Z layer is a separate surface at a
+                  // real physical depth. Rotating reveals actual volume —
+                  // the board never collapses to a flat sheet at any angle.
+                  if (board3D && maxZ > 0) {
+                    // Flat cellSize: depth is handled by per-layer Transforms,
+                    // not by the cascade X/Y diagonal.
+                    final cellSize =
+                        (constraints.maxWidth / cols).clamp(20.0, 200.0);
+
+                    void handleArrowTap(String arrowId) {
+                      debugPrint('🎯 3D layered tap: $arrowId');
+                      if (_pendingPowerUp == 'HAMMER') {
+                        final arrow = board.arrows[arrowId];
+                        setState(() => _pendingPowerUp = null);
+                        if (arrow == null) return;
+                        gameNotifier
+                            .usePowerUp(
+                                HammerPowerUp(targetArrowId: arrowId))
+                            .then((result) {
+                          _handlePowerUpResult(result);
+                          if (result != null && result.success) {
+                            _startSmashAnimation(arrow);
+                          }
+                        });
+                        return;
+                      }
+                      if (activatableSet.contains(arrowId) &&
+                          !board.graph.hasVoidReentry(
+                              arrowId, board.arrows, board.grid, board.shape)) {
+                        final arrow = board.arrows[arrowId];
+                        if (arrow != null) _startExitAnimation(arrow, shape);
+                      }
+                      gameNotifier.activateArrow(arrowId);
+                    }
+
+                    return Container(
+                      color: const Color(0xFF0D0D18),
+                      child: InteractiveViewer(
+                        minScale: 0.5,
+                        maxScale: 3.0,
+                        boundaryMargin: const EdgeInsets.all(200),
+                        constrained: true,
+                        panEnabled: false, // Board3DLayeredView handles pan
+                        scaleEnabled: true,
+                        transformationController: _transformationController,
+                        child: Center(
+                          child: Board3DLayeredView(
+                            board: board,
+                            activatableArrows: activatableSet,
+                            flashMap: gameState.flashMap,
+                            cellSize: cellSize,
+                            minX: minX,
+                            minY: minY,
+                            cols: cols,
+                            rows: rows,
+                            exitingArrows: _buildExitingAnimList(),
+                            highlightArrowId: _hintArrowId,
+                            highlightPulse: _hintController?.value ?? 0,
+                            gridOverlayOpacity: _gridOverlayOpacity,
+                            smashingArrows: _buildSmashingAnimList(),
+                            onArrowTapped: handleArrowTap,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // ── Cascade / 2D view ───────────────────────────────────
+                  // Cascade view (3D game without perspective) or plain 2D.
+                  // The canvas grows by the layer offsets so the cell size
+                  // shrinks just enough for the whole stack to fit.
                   final cellSize = (constraints.maxWidth /
                           (cols + maxZ * BoardProjection.depthStep))
                       .clamp(20.0, 200.0);
@@ -590,12 +664,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   final canvasSize = projection.canvasSize(cols, rows);
                   final gridWidth = canvasSize.width;
                   final gridHeight = canvasSize.height;
-
-                  // In 3D mode a one-finger drag means "rotate the board",
-                  // so the viewer's own panning is turned off to keep the
-                  // gesture unambiguous; pinch-zoom works in both modes.
-                  final board3D = ref.watch(
-                      settingsNotifierProvider.select((s) => s.board3DEnabled));
 
                   return Container(
                     color: const Color(0xFF0d0d18),
@@ -615,33 +683,27 @@ class _GameScreenState extends ConsumerState<GameScreen>
                           height: gridHeight,
                           child: GestureDetector(
                             onTapDown: (details) {
-                              // Hit-test layers from the top of the
-                              // cascade down: the first OCCUPIED cell
-                              // wins, so upper floors are tapped where
-                              // they still have arrows and lower floors
-                              // become reachable through the gaps as the
-                              // stack clears. Flat boards reduce to the
-                              // old single-lookup behavior.
                               String? arrowId;
-                              for (int z = maxZ; z >= 0 && arrowId == null; z--) {
+                              for (int z = maxZ;
+                                  z >= 0 && arrowId == null;
+                                  z--) {
                                 final cell = projection.cellAt(
                                     details.localPosition, z);
                                 if (cell == null) continue;
                                 arrowId = board.grid[cell.toKey()];
                               }
-                              debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
+                              debugPrint(
+                                  '🖱️ Tap at ${details.localPosition} → $arrowId');
                               if (arrowId == null) return;
                               debugPrint('🎯 Arrow tapped: $arrowId');
 
-                              // Hammer targeting mode: any arrow can be the
-                              // target, blocked or not — that's the whole
-                              // point of the hammer, unlike a normal tap.
                               if (_pendingPowerUp == 'HAMMER') {
                                 final arrow = board.arrows[arrowId];
                                 setState(() => _pendingPowerUp = null);
                                 if (arrow == null) return;
                                 gameNotifier
-                                    .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
+                                    .usePowerUp(HammerPowerUp(
+                                        targetArrowId: arrowId))
                                     .then((result) {
                                   _handlePowerUpResult(result);
                                   if (result != null && result.success) {
@@ -651,7 +713,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
                                 return;
                               }
 
-                              if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
+                              if (activatableSet.contains(arrowId) &&
+                                  !board.graph.hasVoidReentry(arrowId,
+                                      board.arrows, board.grid, board.shape)) {
                                 final arrow = board.arrows[arrowId];
                                 if (arrow != null) {
                                   _startExitAnimation(arrow, shape);
