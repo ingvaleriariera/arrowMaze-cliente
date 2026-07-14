@@ -13,7 +13,17 @@ class PreloadLevelsUseCase {
   final ILevelRepository levelRepository;
   final IBoardCache boardCache;
 
-  PreloadLevelsUseCase({required this.levelRepository, required this.boardCache});
+  /// Must match LoadLevelUseCase's depth — they share the depth-keyed
+  /// cache, so a preloaded layout only counts as a hit at the same depth.
+  final int boardDepth;
+
+  PreloadLevelsUseCase({
+    required this.levelRepository,
+    required this.boardCache,
+    this.boardDepth = kBoardDepth,
+  });
+
+  String _cacheKey(String levelId) => '$levelId#d$boardDepth';
 
   /// [onProgress], if given, is called after each level id is processed
   /// (whether it succeeded, failed, or was already cached) with the
@@ -25,7 +35,7 @@ class PreloadLevelsUseCase {
     for (int i = 0; i < levelIds.length; i++) {
       final levelId = levelIds[i];
 
-      if (!boardCache.has(levelId)) {
+      if (!boardCache.has(_cacheKey(levelId))) {
         try {
           final level = await levelRepository.getLevel(levelId);
           // Generation runs on a background isolate via compute() — a
@@ -37,9 +47,10 @@ class PreloadLevelsUseCase {
               seed: level.id.hashCode,
               boardLayoutJson: level.boardLayout,
               difficulty: level.difficulty,
+              depth: boardDepth,
             ),
           );
-          boardCache.put(levelId, result.board.arrows.values.toList());
+          boardCache.put(_cacheKey(levelId), result.board.arrows.values.toList());
           debugPrint('📦 PreloadLevelsUseCase: Cached layout for $levelId');
         } catch (e) {
           debugPrint('⚠️  PreloadLevelsUseCase: Failed to preload $levelId — $e');

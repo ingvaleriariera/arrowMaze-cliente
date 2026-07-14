@@ -13,11 +13,17 @@ class SettingsState {
   /// identical in both modes.
   final bool board3DEnabled;
 
+  /// The 6-connection 3D GAME (not just the view): boards are extruded
+  /// into 4-layer prisms, arrows can travel and exit along the Z axis,
+  /// and GameScreen shows a layer selector to see/tap each floor.
+  final bool game3DEnabled;
+
   const SettingsState({
     this.isMuted = false,
     this.musicEnabled = true,
     this.vibrationEnabled = true,
     this.board3DEnabled = false,
+    this.game3DEnabled = false,
   });
 
   SettingsState copyWith({
@@ -25,12 +31,14 @@ class SettingsState {
     bool? musicEnabled,
     bool? vibrationEnabled,
     bool? board3DEnabled,
+    bool? game3DEnabled,
   }) {
     return SettingsState(
       isMuted: isMuted ?? this.isMuted,
       musicEnabled: musicEnabled ?? this.musicEnabled,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       board3DEnabled: board3DEnabled ?? this.board3DEnabled,
+      game3DEnabled: game3DEnabled ?? this.game3DEnabled,
     );
   }
 }

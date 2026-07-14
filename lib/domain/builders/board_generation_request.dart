@@ -2,15 +2,13 @@ import 'package:arrow_maze_cliente_copy/domain/builders/board_builder.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
 
-/// How many identical layers every board silhouette is extruded to before
-/// generation (see BoardShape.extrude). This is the single switch for 3D
-/// boards: 1 = today's flat game, byte-for-byte unchanged; 4 = the
-/// 6-connection prism the domain fully supports (exercised end to end by
-/// test/domain/board_3d_test.dart). Kept at 1 in production until a
-/// renderer can SHOW layers above z=0 — with the current 2D painter,
-/// arrows in upper layers would be invisible and untappable, making
-/// levels unwinnable in practice.
+/// Default extrusion depth: flat boards, today's game byte-for-byte.
 const int kBoardDepth = 1;
+
+/// Depth used when the "Juego 3D" setting is on: boards become
+/// 6-connection prisms of this many layers (see BoardShape.extrude),
+/// played one layer at a time through GameScreen's layer selector.
+const int kBoardDepth3D = 4;
 
 /// Input for [generateBoard]. Plain data only (no closures, no Flutter
 /// types) so it can cross an isolate boundary via `compute()`.

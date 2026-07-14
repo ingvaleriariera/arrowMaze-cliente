@@ -30,6 +30,11 @@ class BoardPainter extends CustomPainter {
   /// removed from [board].
   final List<SmashingArrowAnim>? smashingArrows;
 
+  /// 3D game: which Z layer of the prism is being viewed. Only cells and
+  /// arrow segments on this layer are painted; segments that continue to
+  /// another layer show a ⊙/⊗ transition marker. Always 0 on flat boards.
+  final int activeLayer;
+
   BoardPainter({
     required this.board,
     required this.activatableArrows,
@@ -42,6 +47,7 @@ class BoardPainter extends CustomPainter {
     this.highlightPulse = 0,
     this.gridOverlayOpacity = 0,
     this.smashingArrows,
+    this.activeLayer = 0,
   });
 
   @override
@@ -57,6 +63,7 @@ class BoardPainter extends CustomPainter {
     final dotPaint = Paint()..color = const Color(0xFF252535);
 
     for (final pos in board.shape.getCells()) {
+      if (pos.z != activeLayer) continue;
       final screenX = (pos.x - minX) * cellSize + cellSize / 2;
       final screenY = (pos.y - minY) * cellSize + cellSize / 2;
       canvas.drawCircle(Offset(screenX, screenY), dotRadius, dotPaint);
@@ -94,6 +101,11 @@ class BoardPainter extends CustomPainter {
     // HTML reference (docs/arrow_maze_v5.html).
     if (exitingArrows != null) {
       for (final exiting in exitingArrows!) {
+        // Exit animations are planar snapshots — only show the ones that
+        // belong to the layer being viewed.
+        if (exiting.cells.isNotEmpty && exiting.cells.first.z != activeLayer) {
+          continue;
+        }
         final color = Color(
           int.parse(exiting.color.replaceFirst('#', ''), radix: 16) |
               0xFF000000,
@@ -144,19 +156,40 @@ class BoardPainter extends CustomPainter {
 
   void _drawArrow(Canvas canvas, Arrow arrow, Color color, double alpha,
       FlashType? flash, {double glowBoost = 0}) {
-    final cellCenters = arrow.segments.map((segment) {
+    // Only the segments living on the active layer are visible; a snake
+    // can span several layers, in which case each layer shows its own
+    // slice of the body.
+    final onLayer = arrow.segments
+        .where((s) => s.position.z == activeLayer)
+        .toList();
+    if (onLayer.isEmpty) return;
+
+    final cellCenters = onLayer.map((segment) {
       final x = segment.position.x - minX;
       final y = segment.position.y - minY;
       return Offset(x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
     }).toList();
 
+    final headOnLayer = arrow.getHead().position.z == activeLayer;
+
     _drawArrowAtOffsets(canvas, cellCenters, arrow.getDirection(), color,
-        alpha, flash, glowBoost: glowBoost);
+        alpha, flash, glowBoost: glowBoost, drawHead: headOnLayer);
+
+    // Layer-transition markers: wherever the body continues to another
+    // layer, mark the cell so the player knows the snake dives/climbs.
+    for (int i = 0; i < onLayer.length; i++) {
+      final dz = onLayer[i].directionToNext.dz;
+      final isHead = headOnLayer && i == onLayer.length - 1;
+      if (dz != 0 && !isHead) {
+        _drawZMarker(canvas, cellCenters[i], dz, color, alpha * 0.8,
+            scale: 0.7);
+      }
+    }
   }
 
   void _drawArrowAtOffsets(Canvas canvas, List<Offset> cellCenters,
       Direction direction, Color color, double alpha, FlashType? flash,
-      {double glowBoost = 0}) {
+      {double glowBoost = 0, bool drawHead = true}) {
     final col = flash == FlashType.ok
         ? const Color(0xFF00F5A0)
         : flash == FlashType.fail
@@ -183,7 +216,7 @@ class BoardPainter extends CustomPainter {
 
       _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
-      _drawHead(canvas, c.dx, c.dy, direction, hw, hl, col, alpha);
+      if (drawHead) _drawHeadOrZMarker(canvas, c, direction, hw, hl, col, alpha);
     } else {
       final r = cellSize * 0.38;
       final path = Path();
@@ -214,7 +247,51 @@ class BoardPainter extends CustomPainter {
 
       _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
-      _drawHead(canvas, last.dx, last.dy, direction, hw, hl, col, alpha);
+      if (drawHead) {
+        _drawHeadOrZMarker(canvas, last, direction, hw, hl, col, alpha);
+      }
+    }
+  }
+
+  /// Planar heads keep the normal triangle; Z-axis heads (3D game) use
+  /// the standard perpendicular-vector notation — ⊗ diving into the
+  /// board, ⊙ coming out of it — since there's no planar component to
+  /// point a triangle toward.
+  void _drawHeadOrZMarker(Canvas canvas, Offset at, Direction direction,
+      double hw, double hl, Color col, double alpha) {
+    if (direction.dz == 0) {
+      _drawHead(canvas, at.dx, at.dy, direction, hw, hl, col, alpha);
+    } else {
+      _drawZMarker(canvas, at, direction.dz, col, alpha);
+    }
+  }
+
+  void _drawZMarker(Canvas canvas, Offset center, int dz, Color col,
+      double alpha, {double scale = 1.0}) {
+    final radius = cellSize * 0.24 * scale;
+    final stroke = max(1.5, cellSize * 0.07 * scale);
+    final paint = Paint()
+      ..color = col.withAlpha((alpha * 255).toInt())
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+
+    canvas.drawCircle(center, radius, paint);
+
+    if (dz > 0) {
+      // Forward, diving into the board: ⊗
+      final d = radius * 0.55;
+      final line = Paint()
+        ..color = col.withAlpha((alpha * 255).toInt())
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(center - Offset(d, d), center + Offset(d, d), line);
+      canvas.drawLine(center - Offset(d, -d), center + Offset(d, -d), line);
+    } else {
+      // Back, coming out of the board: ⊙
+      canvas.drawCircle(
+          center,
+          radius * 0.35,
+          Paint()..color = col.withAlpha((alpha * 255).toInt()));
     }
   }
 
@@ -296,6 +373,7 @@ class BoardPainter extends CustomPainter {
     if (arrow == null) return;
 
     final head = arrow.getHead().position;
+    if (head.z != activeLayer) return;
     final cx = (head.x - minX) * cellSize + cellSize / 2;
     final cy = (head.y - minY) * cellSize + cellSize / 2;
 
@@ -323,6 +401,10 @@ class BoardPainter extends CustomPainter {
       );
       final head = arrow.getHead().position;
       final direction = arrow.getDirection();
+      // Only heads on the visible layer, and only planar exits — a
+      // Z-exit has no on-screen line to draw (its ⊙/⊗ head already says
+      // where it goes).
+      if (head.z != activeLayer || direction.dz != 0) continue;
       final distance = board.shape.distanceToExit(head, direction);
       if (distance <= 0) continue;
 
@@ -352,6 +434,9 @@ class BoardPainter extends CustomPainter {
     if (smashing == null) return;
 
     for (final smash in smashing) {
+      if (smash.cells.isNotEmpty && smash.cells.first.z != activeLayer) {
+        continue;
+      }
       final color = Color(
         int.parse(smash.color.replaceFirst('#', ''), radix: 16) |
             0xFF000000,
@@ -431,7 +516,8 @@ class BoardPainter extends CustomPainter {
         oldDelegate.highlightArrowId != highlightArrowId ||
         oldDelegate.highlightPulse != highlightPulse ||
         oldDelegate.gridOverlayOpacity != gridOverlayOpacity ||
-        oldDelegate.smashingArrows != smashingArrows;
+        oldDelegate.smashingArrows != smashingArrows ||
+        oldDelegate.activeLayer != activeLayer;
   }
 }
 

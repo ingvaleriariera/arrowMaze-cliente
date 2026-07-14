@@ -13,14 +13,25 @@ class LoadLevelUseCase {
   final IBoardCache boardCache;
   final ITimeLimitPolicy timeLimitPolicy;
 
+  /// Extrusion depth for every board this use case builds (1 = flat,
+  /// kBoardDepth3D = 6-connection prisms). Injected so the setting is a
+  /// provider-level concern, not something the use case reads itself.
+  final int boardDepth;
+
   LoadLevelUseCase({
     required this.levelRepository,
     required this.boardCache,
     required this.timeLimitPolicy,
+    this.boardDepth = kBoardDepth,
   });
 
+  /// Cached layouts are only valid for the depth they were generated at —
+  /// a flat layout replayed onto a prism (or vice versa) would desync the
+  /// graph from the arrows, so the cache key carries the depth.
+  String _cacheKey(String levelId) => '$levelId#d$boardDepth';
+
   Future<GameSession> execute(String levelId) async {
-    debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId');
+    debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId (depth $boardDepth)');
 
     final level = await levelRepository.getLevel(levelId);
     debugPrint('   Level loaded: ${level.id}');
@@ -32,7 +43,7 @@ class LoadLevelUseCase {
     // level or from PreloadLevelsUseCase) skips straight to the cheap,
     // synchronous step of building a fresh, unplayed Board from the
     // already-known layout.
-    final cachedLayout = boardCache.get(levelId);
+    final cachedLayout = boardCache.get(_cacheKey(levelId));
     final Board board;
     final int calculatedMaxMoves;
     if (cachedLayout != null) {
@@ -42,7 +53,7 @@ class LoadLevelUseCase {
       // rebuilt on the extruded shape too — a flat shape here would strip
       // the upper layers from the blocking rules.
       board = BoardBuilder.fromArrows(
-        BoardShape.extrude(level.getBoardShape(), kBoardDepth),
+        BoardShape.extrude(level.getBoardShape(), boardDepth),
         cachedLayout,
       );
       calculatedMaxMoves =
@@ -61,11 +72,12 @@ class LoadLevelUseCase {
           seed: level.id.hashCode,
           boardLayoutJson: level.boardLayout,
           difficulty: level.difficulty,
+          depth: boardDepth,
         ),
       );
       board = result.board;
       calculatedMaxMoves = result.maxMoves;
-      boardCache.put(levelId, board.arrows.values.toList());
+      boardCache.put(_cacheKey(levelId), board.arrows.values.toList());
     }
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');
     debugPrint('   Calculated maxMoves: $calculatedMaxMoves (margin for ${level.difficulty})');

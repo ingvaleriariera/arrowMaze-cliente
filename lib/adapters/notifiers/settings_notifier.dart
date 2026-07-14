@@ -29,4 +29,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   void toggleBoard3D() {
     state = state.copyWith(board3DEnabled: !state.board3DEnabled);
   }
+
+  void toggleGame3D() {
+    state = state.copyWith(game3DEnabled: !state.game3DEnabled);
+  }
 }

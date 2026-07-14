@@ -64,6 +64,7 @@ import 'package:arrow_maze_cliente_copy/application/usecases/boards/create_custo
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/delete_custom_board_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/get_community_boards_use_case.dart';
 import 'package:arrow_maze_cliente_copy/application/usecases/boards/manage_my_boards_use_case.dart';
+import 'package:arrow_maze_cliente_copy/domain/builders/board_generation_request.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
 
 // API
@@ -129,16 +130,29 @@ final boardCacheProvider = Provider((ref) => InMemoryBoardCache());
 final timeLimitPolicyProvider =
     Provider<ITimeLimitPolicy>((ref) => PerArrowTimeLimitPolicy());
 
+// Extrusion depth for board construction, driven by the "Juego 3D"
+// setting. select() keeps unrelated settings changes (sound, vibration…)
+// from rebuilding the level-loading use cases; flipping THIS toggle does
+// rebuild them (and GameNotifier), which is fine — it happens in the
+// settings screen, never mid-game. The board cache is depth-keyed, so
+// layouts generated at one depth are never replayed at another.
+final boardDepthProvider = Provider<int>((ref) =>
+    ref.watch(settingsNotifierProvider.select((s) => s.game3DEnabled))
+        ? kBoardDepth3D
+        : kBoardDepth);
+
 // Use Cases
 final loadLevelUseCaseProvider = Provider((ref) => LoadLevelUseCase(
   levelRepository: ref.watch(levelRepositoryProvider),
   boardCache: ref.watch(boardCacheProvider),
   timeLimitPolicy: ref.watch(timeLimitPolicyProvider),
+  boardDepth: ref.watch(boardDepthProvider),
 ));
 
 final preloadLevelsUseCaseProvider = Provider((ref) => PreloadLevelsUseCase(
   levelRepository: ref.watch(levelRepositoryProvider),
   boardCache: ref.watch(boardCacheProvider),
+  boardDepth: ref.watch(boardDepthProvider),
 ));
 
 final activateArrowUseCaseProvider = Provider((ref) => ActivateArrowUseCase(
