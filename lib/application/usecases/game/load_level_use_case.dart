@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_builder.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_generation_request.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
@@ -36,7 +37,14 @@ class LoadLevelUseCase {
     final int calculatedMaxMoves;
     if (cachedLayout != null) {
       debugPrint('⚡ LoadLevelUseCase: Reusing cached arrow layout for $levelId');
-      board = BoardBuilder.fromArrows(level.getBoardShape(), cachedLayout);
+      // Same extrusion as the generation path (generateBoard): cached
+      // arrows were generated on the extruded shape, so the graph must be
+      // rebuilt on the extruded shape too — a flat shape here would strip
+      // the upper layers from the blocking rules.
+      board = BoardBuilder.fromArrows(
+        BoardShape.extrude(level.getBoardShape(), kBoardDepth),
+        cachedLayout,
+      );
       calculatedMaxMoves =
           BoardBuilder.calculateMaxMoves(board.arrows.length, level.difficulty.toUpperCase());
     } else {

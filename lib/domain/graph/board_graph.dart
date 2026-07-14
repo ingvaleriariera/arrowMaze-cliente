@@ -28,15 +28,19 @@ class BoardGraph {
     // The shape's bounding box: an arrow's ray only truly leaves the
     // board once it passes this, not at the first void cell — interior
     // holes are NOT exits when there's board (and possibly arrows)
-    // beyond them. Computed once, not per arrow.
+    // beyond them. Computed once, not per arrow. The Z bound matters as
+    // much as X/Y on extruded boards: without it a forward/back ray
+    // (which never changes x or y) would scan forever.
     final allCells = shape.getCells();
-    late int maxX, maxY;
+    late int maxX, maxY, maxZ;
     if (allCells.isNotEmpty) {
       maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
       maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
+      maxZ = allCells.map((c) => c.z).reduce((a, b) => a > b ? a : b);
     } else {
       maxX = 100;
       maxY = 100;
+      maxZ = 0;
     }
 
     // For each arrow, scan its exit path from the HEAD all the way to
@@ -58,8 +62,10 @@ class BoardGraph {
         final nextPos = position.translate(direction);
         if (nextPos.x < 0 ||
             nextPos.y < 0 ||
+            nextPos.z < 0 ||
             nextPos.x > maxX ||
-            nextPos.y > maxY) {
+            nextPos.y > maxY ||
+            nextPos.z > maxZ) {
           break; // Truly off the board — the arrow can exit here
         }
 
@@ -111,17 +117,24 @@ class BoardGraph {
     var position = arrow.getHead().position;
     bool foundVoid = false;
     final allCells = shape.getCells();
-    late int maxX, maxY;
+    late int maxX, maxY, maxZ;
     if (allCells.isNotEmpty) {
       maxX = allCells.map((c) => c.x).reduce((a, b) => a > b ? a : b);
       maxY = allCells.map((c) => c.y).reduce((a, b) => a > b ? a : b);
+      maxZ = allCells.map((c) => c.z).reduce((a, b) => a > b ? a : b);
     } else {
       maxX = 100;
       maxY = 100;
+      maxZ = 0;
     }
     while (true) {
       final nextPos = position.translate(direction);
-      if (nextPos.x < 0 || nextPos.y < 0 || nextPos.x > maxX || nextPos.y > maxY) break;
+      if (nextPos.x < 0 ||
+          nextPos.y < 0 ||
+          nextPos.z < 0 ||
+          nextPos.x > maxX ||
+          nextPos.y > maxY ||
+          nextPos.z > maxZ) break;
       if (!shape.contains(nextPos)) { foundVoid = true; }
       else if (foundVoid && shape.contains(nextPos)) {
         final occupiedBy = grid[nextPos.toKey()];

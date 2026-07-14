@@ -42,6 +42,25 @@ class BoardShape {
     return BoardShape(validCells: validCells);
   }
 
+  /// Extrudes a flat silhouette into a prism of [depth] identical layers:
+  /// every "x,y" cell becomes cells at z=0..depth-1. With depth=1 the
+  /// result has exactly the same keys as [shape2D] (z=0 uses the 2-part
+  /// canonical key), so 2D boards flow through unchanged.
+  ///
+  /// This is the ONLY place 3D boards are born — the backend keeps sending
+  /// flat 0/1 grids and never learns about depth.
+  static BoardShape extrude(BoardShape shape2D, int depth) {
+    if (depth <= 1) return shape2D;
+
+    final cells = <String>{};
+    for (final cell in shape2D.getCells()) {
+      for (int z = 0; z < depth; z++) {
+        cells.add(Position(cell.x, cell.y, z).toKey());
+      }
+    }
+    return BoardShape(validCells: cells);
+  }
+
   bool contains(Position position) =>
       validCells.contains(position.toKey());
 
@@ -65,12 +84,19 @@ class BoardShape {
     return distance;
   }
 
-  List<Position> getCells() => validCells
-      .map((key) {
-        final parts = key.split(',');
-        return Position(int.parse(parts[0]), int.parse(parts[1]));
-      })
-      .toList();
+  List<Position> getCells() =>
+      validCells.map(Position.fromKey).toList();
+
+  /// Highest z among the shape's cells (0 for flat boards). Ray scans use
+  /// it the same way they use the x/y bounding box: a ray traveling along
+  /// Z has truly left the board once it passes this.
+  int maxZ() {
+    var max = 0;
+    for (final cell in getCells()) {
+      if (cell.z > max) max = cell.z;
+    }
+    return max;
+  }
 
   int size() => validCells.length;
 

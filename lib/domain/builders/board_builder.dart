@@ -433,7 +433,12 @@ class BoardBuilder {
   bool _hasDeadlockPattern(Position head, Direction direction, Map<String, String> grid) {
     final oppositeDir = direction.opposite();
     var pos = head.translate(direction);
-    while (pos.x >= 0 && pos.y >= 0 && pos.x < 100 && pos.y < 100) {
+    while (pos.x >= 0 &&
+        pos.y >= 0 &&
+        pos.z >= 0 &&
+        pos.x < 100 &&
+        pos.y < 100 &&
+        pos.z < 100) {
       // Holes (cells outside the shape, e.g. the hollow center of a ring
       // board) are deliberately scanned across, not treated as an exit:
       // an arrow on the far side of the hole is still on the same board
@@ -507,12 +512,7 @@ class BoardBuilder {
 
     for (int i = 1; i < maxLen; i++) {
       final curr = path.last;
-      final dirs = [
-        Direction.up,
-        Direction.down,
-        Direction.left,
-        Direction.right
-      ];
+      final dirs = List.of(_availableDirections());
       dirs.shuffle(_random);
 
       bool added = false;
@@ -536,44 +536,45 @@ class BoardBuilder {
 
   List<Direction> _getVectorsForPath(List<Position> path) {
     if (path.length == 1) {
-      return [
-        Direction.up,
-        Direction.down,
-        Direction.left,
-        Direction.right,
-      ]..shuffle(_random);
+      return List.of(_availableDirections())..shuffle(_random);
     }
 
-    final tail = path[path.length - 2];
-    final head = path.last;
-    final dx = head.x - tail.x;
-    final dy = head.y - tail.y;
+    final travel = _directionBetween(path[path.length - 2], path.last);
+    if (travel != null) return [travel];
 
-    for (final dir in [Direction.up, Direction.down, Direction.left, Direction.right]) {
-      if (dir.dx == dx && dir.dy == dy) {
-        return [dir];
-      }
+    return List.of(_availableDirections())..shuffle(_random);
+  }
+
+  /// The unit direction from [from] to its adjacent [to], across any of
+  /// the 6 connections; null when the cells aren't adjacent.
+  Direction? _directionBetween(Position from, Position to) {
+    final dx = to.x - from.x;
+    final dy = to.y - from.y;
+    final dz = to.z - from.z;
+    for (final dir in Direction.all) {
+      if (dir.dx == dx && dir.dy == dy && dir.dz == dz) return dir;
     }
-
-    return [Direction.up, Direction.down, Direction.left, Direction.right]
-      ..shuffle(_random);
+    return null;
   }
 
   bool _isActivatable(
       Position head, Direction vec, Map<String, String> grid,
       {Set<String>? ownCells}) {
-    var cx = head.x + vec.dx;
-    var cy = head.y + vec.dy;
+    var pos = head.translate(vec);
 
     // Same exit rule as BoardGraph.build and the in-game tap check
     // (hasVoidReentry): interior holes are NOT exits — the ray tunnels
     // across them, and any occupied cell on the far side blocks. The ray
-    // only truly leaves the board past the shape's bounding box.
+    // only truly leaves the board past the shape's bounding box (all
+    // three axes: a Z-bound matters as much as X/Y on extruded boards).
     final bounds = _shapeBounds();
 
-    while (cx >= 0 && cy >= 0 && cx <= bounds.maxX && cy <= bounds.maxY) {
-      final pos = Position(cx, cy);
-
+    while (pos.x >= 0 &&
+        pos.y >= 0 &&
+        pos.z >= 0 &&
+        pos.x <= bounds.maxX &&
+        pos.y <= bounds.maxY &&
+        pos.z <= bounds.maxZ) {
       if (_shape.contains(pos)) {
         // Blocked by another arrow, or by one of this arrow's own
         // not-yet-registered cells (see _findActivatableArrow).
@@ -583,25 +584,33 @@ class BoardBuilder {
         }
       }
 
-      cx += vec.dx;
-      cy += vec.dy;
+      pos = pos.translate(vec);
     }
 
     return true;
   }
 
-  ({int maxX, int maxY})? _cachedBounds;
+  ({int maxX, int maxY, int maxZ})? _cachedBounds;
 
-  ({int maxX, int maxY}) _shapeBounds() {
+  ({int maxX, int maxY, int maxZ}) _shapeBounds() {
     final cached = _cachedBounds;
     if (cached != null) return cached;
-    var maxX = 0, maxY = 0;
+    var maxX = 0, maxY = 0, maxZ = 0;
     for (final c in _shape.getCells()) {
       if (c.x > maxX) maxX = c.x;
       if (c.y > maxY) maxY = c.y;
+      if (c.z > maxZ) maxZ = c.z;
     }
-    return _cachedBounds = (maxX: maxX, maxY: maxY);
+    return _cachedBounds = (maxX: maxX, maxY: maxY, maxZ: maxZ);
   }
+
+  /// The direction set this shape's cells connect through: 4 planar
+  /// neighbors on flat boards, 6 (adding forward/back along Z) on
+  /// extruded ones. Gated on actual depth so flat boards never generate
+  /// arrows pointing into Z — those would exit instantly and trivialize
+  /// the puzzle.
+  List<Direction> _availableDirections() =>
+      _shapeBounds().maxZ > 0 ? Direction.all : Direction.planar;
 
   List<ArrowSegment> _createArrowSegments(
       List<Position> path, Direction direction) {
@@ -610,15 +619,9 @@ class BoardBuilder {
     for (int i = 0; i < path.length - 1; i++) {
       final curr = path[i];
       final next = path[i + 1];
-      final dx = next.x - curr.x;
-      final dy = next.y - curr.y;
-
-      Direction dir = Direction.up;
-      if (dx == 1 && dy == 0) dir = Direction.right;
-      if (dx == -1 && dy == 0) dir = Direction.left;
-      if (dx == 0 && dy == 1) dir = Direction.down;
-      if (dx == 0 && dy == -1) dir = Direction.up;
-
+      // Paths are grown one adjacent cell at a time, so this is always
+      // one of the 6 unit directions.
+      final dir = _directionBetween(curr, next) ?? Direction.up;
       segments.add(ArrowSegment(position: curr, directionToNext: dir));
     }
 
@@ -640,8 +643,5 @@ class BoardBuilder {
     return ArrowColor.fromHex(colors[index % colors.length]);
   }
 
-  Position _positionFromKey(String key) {
-    final parts = key.split(',');
-    return Position(int.parse(parts[0]), int.parse(parts[1]));
-  }
+  Position _positionFromKey(String key) => Position.fromKey(key);
 }

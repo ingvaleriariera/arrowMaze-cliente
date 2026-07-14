@@ -17,6 +17,15 @@ class ArrowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Z-axis arrows (3D boards) have no planar component to draw a shaft
+    // toward — use the standard perpendicular-vector notation instead:
+    // ⊙ (dot in circle) pointing out of the screen, ⊗ (cross in circle)
+    // pointing into it.
+    if (direction.dx == 0 && direction.dy == 0) {
+      _paintZAxisMarker(canvas, size);
+      return;
+    }
+
     // Replicate HTML drawing logic exactly
     final bw = cellSize * 0.17;  // body width (line thickness)
     final hw = cellSize * 0.48;  // head width (triangle base)
@@ -89,6 +98,33 @@ class ArrowPainter extends CustomPainter {
         ..color = color.withOpacity(0.3)
         ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);
       canvas.drawPath(path, shadowPaint);
+    }
+  }
+
+  void _paintZAxisMarker(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = cellSize * 0.26;
+
+    final ring = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = cellSize * 0.10;
+    canvas.drawCircle(center, radius, ring);
+
+    if (direction.dz > 0) {
+      // Forward (into the board): ⊗ — an X inside the ring.
+      final line = Paint()
+        ..color = color
+        ..strokeWidth = cellSize * 0.09
+        ..strokeCap = StrokeCap.round;
+      final d = radius * 0.55;
+      canvas.drawLine(
+          center - Offset(d, d), center + Offset(d, d), line);
+      canvas.drawLine(
+          center - Offset(d, -d), center + Offset(d, -d), line);
+    } else {
+      // Back (out of the board): ⊙ — a dot inside the ring.
+      canvas.drawCircle(center, radius * 0.35, Paint()..color = color);
     }
   }
 
