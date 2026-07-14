@@ -20,6 +20,7 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_viewport.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_projection.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/power_up_bar.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
@@ -86,11 +87,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
   // Set right before programmatically popping after the player confirmed
   // leaving mid-run, so PopScope lets that one pop through.
   bool _exitConfirmed = false;
-
-  // 3D game: which Z layer of the prism is on screen (0 = base). Reset on
-  // every level load; stays 0 (and the selector stays hidden) on flat
-  // boards.
-  int _activeLayer = 0;
 
   // One life per defeat, tracked here because the state listener can't
   // compare against the previous emission: GameSession is mutable, so
@@ -166,7 +162,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
   void _loadLevel() {
     debugPrint('🎯 GameScreen._loadLevel: Starting load for levelId=${widget.levelId}');
     _lifeDeductedThisRun = false;
-    _activeLayer = 0;
     _resetPowerUpUiState();
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
     gameNotifier.loadLevel(widget.levelId, _currentUserId());
@@ -197,9 +192,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
   String _currentUserId() => ref.read(authNotifierProvider).userId ?? 'guest';
 
   void _startExitAnimation(Arrow arrow, BoardShape shape) {
-    // Z-axis exits (3D game) have no planar path to slide along — the
-    // worm animation would just freeze in place. The arrow simply leaves.
-    if (arrow.getDirection().dz != 0) return;
     final controller = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -285,16 +277,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       vsync: this,
     )..repeat(reverse: true);
     _hintController = controller;
-    // 3D game: the suggested arrow may live on another layer — jump the
-    // view there, or the highlight would pulse invisibly.
-    final hintedArrow =
-        ref.read(gameNotifierProvider).session?.board.arrows[arrowId];
-    setState(() {
-      if (hintedArrow != null) {
-        _activeLayer = hintedArrow.getHead().position.z;
-      }
-      _hintArrowId = arrowId;
-    });
+    setState(() => _hintArrowId = arrowId);
     controller.addListener(() => setState(() {}));
 
     Future.delayed(const Duration(milliseconds: 2500), () {
@@ -591,9 +574,22 @@ class _GameScreenState extends ConsumerState<GameScreen>
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final cellSize = (constraints.maxWidth / cols).clamp(20.0, 200.0);
-                  final gridWidth = cellSize * cols;
-                  final gridHeight = cellSize * rows;
+                  // Cascade view (3D game): the canvas grows by the layer
+                  // offsets, so the cell size shrinks just enough for the
+                  // whole stack to fit the width.
+                  final maxZ = board.shape.maxZ();
+                  final cellSize = (constraints.maxWidth /
+                          (cols + maxZ * BoardProjection.depthStep))
+                      .clamp(20.0, 200.0);
+                  final projection = BoardProjection(
+                    cellSize: cellSize,
+                    minX: minX,
+                    minY: minY,
+                    maxZ: maxZ,
+                  );
+                  final canvasSize = projection.canvasSize(cols, rows);
+                  final gridWidth = canvasSize.width;
+                  final gridHeight = canvasSize.height;
 
                   // In 3D mode a one-finger drag means "rotate the board",
                   // so the viewer's own panning is turned off to keep the
@@ -619,16 +615,21 @@ class _GameScreenState extends ConsumerState<GameScreen>
                           height: gridHeight,
                           child: GestureDetector(
                             onTapDown: (details) {
-                              final gridX = (details.localPosition.dx / cellSize).floor() + minX;
-                              final gridY = (details.localPosition.dy / cellSize).floor() + minY;
-                              debugPrint('🖱️ Tap at ($gridX, $gridY) layer $_activeLayer');
-
-                              // Taps land on the layer currently on
-                              // screen — Position's canonical key keeps
-                              // this identical to the old '$x,$y' lookup
-                              // on flat boards.
-                              final arrowId = board
-                                  .grid[Position(gridX, gridY, _activeLayer).toKey()];
+                              // Hit-test layers from the top of the
+                              // cascade down: the first OCCUPIED cell
+                              // wins, so upper floors are tapped where
+                              // they still have arrows and lower floors
+                              // become reachable through the gaps as the
+                              // stack clears. Flat boards reduce to the
+                              // old single-lookup behavior.
+                              String? arrowId;
+                              for (int z = maxZ; z >= 0 && arrowId == null; z--) {
+                                final cell = projection.cellAt(
+                                    details.localPosition, z);
+                                if (cell == null) continue;
+                                arrowId = board.grid[cell.toKey()];
+                              }
+                              debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
                               if (arrowId == null) return;
                               debugPrint('🎯 Arrow tapped: $arrowId');
 
@@ -671,7 +672,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
                                 highlightPulse: _hintController?.value ?? 0,
                                 gridOverlayOpacity: _gridOverlayOpacity,
                                 smashingArrows: _buildSmashingAnimList(),
-                                activeLayer: _activeLayer,
                               ),
                               size: Size(gridWidth, gridHeight),
                             ),
@@ -692,58 +692,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
             ),
           ],
         ),
-        // 3D game: layer selector, floating on the right edge. Only shown
-        // when the board actually has depth. Layers are displayed top-down
-        // (highest z first) so the column reads like the prism itself.
-        if (board.shape.maxZ() > 0)
-          Positioned(
-            right: 8,
-            top: 0,
-            bottom: 90,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.layers, color: Colors.white54, size: 18),
-                    const SizedBox(height: 4),
-                    for (int z = board.shape.maxZ(); z >= 0; z--)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _activeLayer = z),
-                          child: Container(
-                            width: 34,
-                            height: 30,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: z == _activeLayer
-                                  ? const Color(0xFF00F5A0)
-                                  : const Color(0xFF1a1a2e),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${z + 1}',
-                              style: TextStyle(
-                                color: z == _activeLayer
-                                    ? Colors.black
-                                    : Colors.white70,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         // Hammer targeting banner
         if (_pendingPowerUp == 'HAMMER')
           Positioned(

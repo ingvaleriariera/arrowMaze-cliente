@@ -34,12 +34,19 @@ class BoardProjection {
   /// Screen center of a cell. Layer z is shifted right by z steps and up
   /// by z steps; the whole stack is pushed down by maxZ steps so the top
   /// layer never leaves the canvas.
-  Offset centerOf(Position pos) => centerOfXYZ(
-      pos.x.toDouble(), pos.y.toDouble(), pos.z);
+  Offset centerOf(Position pos) =>
+      centerOfXYZf(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble());
 
   /// Same as [centerOf] but accepts fractional grid coordinates — used by
   /// the exit animation, which interpolates between cells.
-  Offset centerOfXYZ(double gx, double gy, int z) => Offset(
+  Offset centerOfXYZ(double gx, double gy, int z) =>
+      centerOfXYZf(gx, gy, z.toDouble());
+
+  /// Same as [centerOfXYZ] but accepts a fractional z coordinate — used by
+  /// the worm exit animation so Z-exit arrows glide smoothly between layers
+  /// instead of jumping. Planar arrows pass their integer z cast to double
+  /// and get exactly the same result as before.
+  Offset centerOfXYZf(double gx, double gy, double z) => Offset(
         (gx - minX) * cellSize + cellSize / 2 + z * _step,
         (gy - minY) * cellSize + cellSize / 2 + (maxZ - z) * _step,
       );

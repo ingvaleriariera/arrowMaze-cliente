@@ -133,12 +133,14 @@ class BoardPainter extends CustomPainter {
         final headTravel = exiting.progress * totalDistance;
 
         final cellCenters = List<Offset>.generate(n, (i) {
-          final pos = _posOnPath(exiting.cells, exiting.direction, i + headTravel);
-          // The interpolation is planar (Z exits skip this animation);
-          // each sample keeps the layer of the nearest original cell so
-          // cross-layer bodies stay on their floors while sliding out.
-          final z = exiting.cells[min(i, n - 1)].z;
-          return projection.centerOfXYZ(pos.dx, pos.dy, z);
+          final s = i + headTravel;
+          final pos = _posOnPath(exiting.cells, exiting.direction, s);
+          // _zOnPath interpolates the z coordinate along the path, mirroring
+          // _posOnPath for the Z axis. For planar arrows dz=0 so z stays
+          // constant (same result as before). For Z-exit arrows (dz=±1) z
+          // glides smoothly so the worm crawls diagonally through the cascade.
+          final z = _zOnPath(exiting.cells, exiting.direction, s);
+          return projection.centerOfXYZf(pos.dx, pos.dy, z);
         });
 
         _drawArrowAtOffsets(canvas, cellCenters, exiting.direction, color, 1.0, null);
@@ -264,6 +266,26 @@ class BoardPainter extends CustomPainter {
       a.x + (b.x - a.x) * f,
       a.y + (b.y - a.y) * f,
     );
+  }
+
+  /// Fractional z coordinate along [cells] extended past its last cell in
+  /// [direction], mirroring [_posOnPath]'s x/y interpolation on the Z axis.
+  ///
+  /// For planar arrows (dz=0): all cells share the same z, so the result is
+  /// constant — identical to the old hard-coded `cells[min(i,n-1)].z`.
+  /// For Z-exit arrows (dz=±1): z glides smoothly as the worm slithers out,
+  /// so the exit animation follows the cascade diagonal instead of popping.
+  double _zOnPath(List<Position> cells, Direction direction, double s) {
+    final n = cells.length;
+    if (s <= 0) return cells[0].z.toDouble();
+    if (s >= n - 1) {
+      final last = cells[n - 1];
+      final overshoot = s - (n - 1);
+      return last.z + direction.dz * overshoot;
+    }
+    final i = s.floor();
+    final f = s - i;
+    return cells[i].z + (cells[i + 1].z - cells[i].z) * f;
   }
 
   void _drawArrow(Canvas canvas, Arrow arrow, Color color, double alpha,

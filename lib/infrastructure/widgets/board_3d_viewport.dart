@@ -1,3 +1,4 @@
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 
 /// Presentation-layer strategy for how the board is shown: when [enabled],
@@ -25,11 +26,10 @@ class _Board3DViewportState extends State<Board3DViewport> {
   // without foreshortening the far rows into unreadability.
   static const double _defaultTilt = 0.55;
 
-  // Rotations are clamped short of edge-on (~72°). Beyond that the board
-  // is unreadable anyway, and blur effects rasterized under near-singular
-  // perspective allocate enormous offscreen buffers — steep angles are
-  // exactly where big boards (level 15) used to freeze the raster thread.
-  static const double _maxAngle = 1.25;
+  // Maximum X tilt (forward/back). pi = 180 ° so the user can flip the
+  // board completely. Y (horizontal spin) is unclamped — it wraps freely
+  // because a 2D canvas has a 180° repeat anyway.
+  static const double _maxTiltX = pi;
 
   // In 3D mode the board is ALWAYS shown as a
   // flat-rasterized GPU image, and the perspective transform is applied
@@ -96,10 +96,15 @@ class _Board3DViewportState extends State<Board3DViewport> {
       // two-finger pinch still reaches the InteractiveViewer's zoom.
       onPanUpdate: (details) {
         setState(() {
-          _rotationY =
-              (_rotationY + details.delta.dx * 0.01).clamp(-_maxAngle, _maxAngle);
+          // Y (horizontal spin): unclamped so the user can give it a full
+          // 360° turn. The canvas is symmetric every 180° so the UX is
+          // continuous even past the "back" of the board.
+          _rotationY += details.delta.dx * 0.01;
+          // X (tilt forward/back): clamped to ±180° so the board never
+          // spins past pointing straight down/up, but gives plenty of room
+          // beyond the old 72° limit.
           _rotationX =
-              (_rotationX + details.delta.dy * 0.008).clamp(-_maxAngle, _maxAngle);
+              (_rotationX + details.delta.dy * 0.008).clamp(-_maxTiltX, _maxTiltX);
         });
       },
       onLongPress: _resetPose,
