@@ -116,11 +116,7 @@ class _Board3DViewportState extends State<Board3DViewport> {
           ..setEntry(3, 2, 0.0012)
           ..rotateX(_rotationX)
           ..rotateY(_rotationY),
-        child: SnapshotWidget(
-          controller: _snapshotController,
-          mode: SnapshotMode.permissive,
-          child: widget.child,
-        ),
+        child: widget.child,
       ),
     );
   }
