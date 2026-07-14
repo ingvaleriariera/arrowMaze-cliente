@@ -4,6 +4,7 @@ import 'package:arrow_maze_cliente_copy/domain/entities/arrow.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_projection.dart';
 
 enum FlashType { ok, fail }
 
@@ -30,10 +31,15 @@ class BoardPainter extends CustomPainter {
   /// removed from [board].
   final List<SmashingArrowAnim>? smashingArrows;
 
-  /// 3D game: which Z layer of the prism is being viewed. Only cells and
-  /// arrow segments on this layer are painted; segments that continue to
-  /// another layer show a ⊙/⊗ transition marker. Always 0 on flat boards.
-  final int activeLayer;
+  /// 3D game: cascade projection drawing every layer simultaneously —
+  /// see BoardProjection. On flat boards it degenerates to the plain 2D
+  /// math this painter always used.
+  late final BoardProjection projection = BoardProjection(
+    cellSize: cellSize,
+    minX: minX,
+    minY: minY,
+    maxZ: board.shape.maxZ(),
+  );
 
   BoardPainter({
     required this.board,
@@ -47,8 +53,17 @@ class BoardPainter extends CustomPainter {
     this.highlightPulse = 0,
     this.gridOverlayOpacity = 0,
     this.smashingArrows,
-    this.activeLayer = 0,
   });
+
+  /// Floor identity colors for the cell dots, one per layer (adapted to
+  /// the dark background from the Forge reference palette: gray, blue,
+  /// green, yellow pastels).
+  static const List<Color> _layerDotColors = [
+    Color(0xFF252535),
+    Color(0xFF1E3A55),
+    Color(0xFF1E4638),
+    Color(0xFF4A4322),
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -58,15 +73,22 @@ class BoardPainter extends CustomPainter {
       Paint()..color = const Color(0xFF0D0D18),
     );
 
-    // 2. Draw valid cell dots
-    final dotRadius = max(2.0, cellSize * 0.07);
-    final dotPaint = Paint()..color = const Color(0xFF252535);
+    // 1b. Prism lateral faces — the "fat" 3D body of the shape.
+    // Drawn before cell dots and arrows so everything on top renders
+    // over the faces correctly. Skipped entirely on flat (2D) boards.
+    _drawPrismFaces(canvas);
 
-    for (final pos in board.shape.getCells()) {
-      if (pos.z != activeLayer) continue;
-      final screenX = (pos.x - minX) * cellSize + cellSize / 2;
-      final screenY = (pos.y - minY) * cellSize + cellSize / 2;
-      canvas.drawCircle(Offset(screenX, screenY), dotRadius, dotPaint);
+    // 2. Draw valid cell dots — every layer at once, bottom (z=0) first
+    // so upper floors paint over lower ones, each floor with its own
+    // identity color.
+    final dotRadius = max(2.0, cellSize * 0.07);
+    final cells = board.shape.getCells()
+      ..sort((a, b) => a.z.compareTo(b.z));
+
+    for (final pos in cells) {
+      final dotPaint = Paint()
+        ..color = _layerDotColors[pos.z % _layerDotColors.length];
+      canvas.drawCircle(projection.centerOf(pos), dotRadius, dotPaint);
     }
 
     // 3. Draw static arrows
@@ -101,11 +123,6 @@ class BoardPainter extends CustomPainter {
     // HTML reference (docs/arrow_maze_v5.html).
     if (exitingArrows != null) {
       for (final exiting in exitingArrows!) {
-        // Exit animations are planar snapshots — only show the ones that
-        // belong to the layer being viewed.
-        if (exiting.cells.isNotEmpty && exiting.cells.first.z != activeLayer) {
-          continue;
-        }
         final color = Color(
           int.parse(exiting.color.replaceFirst('#', ''), radix: 16) |
               0xFF000000,
@@ -117,14 +134,109 @@ class BoardPainter extends CustomPainter {
 
         final cellCenters = List<Offset>.generate(n, (i) {
           final pos = _posOnPath(exiting.cells, exiting.direction, i + headTravel);
-          final x = pos.dx - minX;
-          final y = pos.dy - minY;
-          return Offset(
-              x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
+          // The interpolation is planar (Z exits skip this animation);
+          // each sample keeps the layer of the nearest original cell so
+          // cross-layer bodies stay on their floors while sliding out.
+          final z = exiting.cells[min(i, n - 1)].z;
+          return projection.centerOfXYZ(pos.dx, pos.dy, z);
         });
 
         _drawArrowAtOffsets(canvas, cellCenters, exiting.direction, color, 1.0, null);
       }
+    }
+  }
+
+  /// Draws the visible lateral faces of the extruded prism that gives the
+  /// board its 3D "fat" appearance. Each face is a quadrilateral spanning
+  /// from the bottom layer (z=0) to the top layer (z=maxZ):
+  ///
+  ///   • South face (front): drawn for every cell whose southern neighbour
+  ///     is outside the shape. Painted in a mid-dark navy.
+  ///   • East face (right): drawn for every cell whose eastern neighbour is
+  ///     outside the shape. Painted slightly darker (shadow effect).
+  ///
+  /// Both faces are outlined with a purple-ish stroke that echoes the
+  /// neon aesthetic of the game without clashing with arrow colors.
+  ///
+  /// Returns immediately when [projection.maxZ] == 0 (flat / 2D boards)
+  /// so the 2D rendering path is completely unaffected.
+  void _drawPrismFaces(Canvas canvas) {
+    final mz = projection.maxZ;
+    if (mz <= 0) return;
+
+    final half = projection.cellSize / 2;
+
+    // South face — slightly lit (this is the "front" of the prism,
+    // closest to the viewer in the cascade isometric view).
+    final southPaint = Paint()..color = const Color(0xFF1C1C3C);
+    // East face — darker (side face catches less "light").
+    final eastPaint = Paint()..color = const Color(0xFF111128);
+    // Shared edge outline — blue-purple neon hint, same aesthetic family
+    // as the arrow colors.
+    final edgePaint = Paint()
+      ..color = const Color(0xFF30307A)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    // Iterate the base (z=0) silhouette only — every (x,y) that exists
+    // at z=0 also exists at every upper layer (extrusion is uniform), so
+    // the boundary check is the same for all layers.
+    final baseCells = board.shape.getCells()
+        .where((p) => p.z == 0)
+        .toList();
+
+    // ── South faces (bottom edge exposed) ──────────────────────────────
+    for (final pos in baseCells) {
+      final gx = pos.x;
+      final gy = pos.y;
+      if (board.shape.contains(Position(gx, gy + 1, 0))) continue;
+
+      // Bottom edge of cell (gx, gy) at z=0 (lowest layer)
+      final c0 = projection.centerOf(Position(gx, gy, 0));
+      final bl0 = c0 + Offset(-half, half);
+      final br0 = c0 + Offset(half, half);
+
+      // Bottom edge of same cell at z=mz (top layer)
+      final cM = projection.centerOf(Position(gx, gy, mz));
+      final blM = cM + Offset(-half, half);
+      final brM = cM + Offset(half, half);
+
+      final path = Path()
+        ..moveTo(bl0.dx, bl0.dy)
+        ..lineTo(br0.dx, br0.dy)
+        ..lineTo(brM.dx, brM.dy)
+        ..lineTo(blM.dx, blM.dy)
+        ..close();
+
+      canvas.drawPath(path, southPaint);
+      canvas.drawPath(path, edgePaint);
+    }
+
+    // ── East faces (right edge exposed) ────────────────────────────────
+    for (final pos in baseCells) {
+      final gx = pos.x;
+      final gy = pos.y;
+      if (board.shape.contains(Position(gx + 1, gy, 0))) continue;
+
+      // Right edge of cell (gx, gy) at z=0
+      final c0 = projection.centerOf(Position(gx, gy, 0));
+      final tr0 = c0 + Offset(half, -half);
+      final br0 = c0 + Offset(half, half);
+
+      // Right edge at z=mz
+      final cM = projection.centerOf(Position(gx, gy, mz));
+      final trM = cM + Offset(half, -half);
+      final brM = cM + Offset(half, half);
+
+      final path = Path()
+        ..moveTo(tr0.dx, tr0.dy)
+        ..lineTo(br0.dx, br0.dy)
+        ..lineTo(brM.dx, brM.dy)
+        ..lineTo(trM.dx, trM.dy)
+        ..close();
+
+      canvas.drawPath(path, eastPaint);
+      canvas.drawPath(path, edgePaint);
     }
   }
 
@@ -156,40 +268,25 @@ class BoardPainter extends CustomPainter {
 
   void _drawArrow(Canvas canvas, Arrow arrow, Color color, double alpha,
       FlashType? flash, {double glowBoost = 0}) {
-    // Only the segments living on the active layer are visible; a snake
-    // can span several layers, in which case each layer shows its own
-    // slice of the body.
-    final onLayer = arrow.segments
-        .where((s) => s.position.z == activeLayer)
+    // The whole snake body, projected through the cascade: segments on
+    // different layers land at different diagonal offsets, so a body that
+    // climbs between floors is drawn as one continuous stroke with a
+    // visible diagonal "in the air" — no per-layer slicing.
+    final cellCenters = arrow.segments
+        .map((segment) => projection.centerOf(segment.position))
         .toList();
-    if (onLayer.isEmpty) return;
-
-    final cellCenters = onLayer.map((segment) {
-      final x = segment.position.x - minX;
-      final y = segment.position.y - minY;
-      return Offset(x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
-    }).toList();
-
-    final headOnLayer = arrow.getHead().position.z == activeLayer;
 
     _drawArrowAtOffsets(canvas, cellCenters, arrow.getDirection(), color,
-        alpha, flash, glowBoost: glowBoost, drawHead: headOnLayer);
-
-    // Layer-transition markers: wherever the body continues to another
-    // layer, mark the cell so the player knows the snake dives/climbs.
-    for (int i = 0; i < onLayer.length; i++) {
-      final dz = onLayer[i].directionToNext.dz;
-      final isHead = headOnLayer && i == onLayer.length - 1;
-      if (dz != 0 && !isHead) {
-        _drawZMarker(canvas, cellCenters[i], dz, color, alpha * 0.8,
-            scale: 0.7);
-      }
-    }
+        alpha, flash, glowBoost: glowBoost);
   }
 
   void _drawArrowAtOffsets(Canvas canvas, List<Offset> cellCenters,
       Direction direction, Color color, double alpha, FlashType? flash,
-      {double glowBoost = 0, bool drawHead = true}) {
+      {double glowBoost = 0}) {
+    // Screen-space direction: planar arrows keep their axis; Z arrows
+    // point along the cascade diagonal toward their destination layer.
+    final (vx, vy) = projection.screenVector(
+        direction.dx, direction.dy, direction.dz);
     final col = flash == FlashType.ok
         ? const Color(0xFF00F5A0)
         : flash == FlashType.fail
@@ -210,13 +307,13 @@ class BoardPainter extends CustomPainter {
 
     if (cellCenters.length == 1) {
       final c = cellCenters[0];
-      final startX = c.dx - direction.dx * cellSize * 0.28;
-      final startY = c.dy - direction.dy * cellSize * 0.28;
+      final startX = c.dx - vx * cellSize * 0.28;
+      final startY = c.dy - vy * cellSize * 0.28;
       final path = Path()..moveTo(startX, startY)..lineTo(c.dx, c.dy);
 
       _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
-      if (drawHead) _drawHeadOrZMarker(canvas, c, direction, hw, hl, col, alpha);
+      _drawHead(canvas, c.dx, c.dy, vx, vy, hw, hl, col, alpha);
     } else {
       final r = cellSize * 0.38;
       final path = Path();
@@ -247,51 +344,7 @@ class BoardPainter extends CustomPainter {
 
       _drawGradientPath(canvas, path, col, glowAlpha, bw, glowBlur);
       _drawGradientPath(canvas, path, col, alpha, bw, null);
-      if (drawHead) {
-        _drawHeadOrZMarker(canvas, last, direction, hw, hl, col, alpha);
-      }
-    }
-  }
-
-  /// Planar heads keep the normal triangle; Z-axis heads (3D game) use
-  /// the standard perpendicular-vector notation — ⊗ diving into the
-  /// board, ⊙ coming out of it — since there's no planar component to
-  /// point a triangle toward.
-  void _drawHeadOrZMarker(Canvas canvas, Offset at, Direction direction,
-      double hw, double hl, Color col, double alpha) {
-    if (direction.dz == 0) {
-      _drawHead(canvas, at.dx, at.dy, direction, hw, hl, col, alpha);
-    } else {
-      _drawZMarker(canvas, at, direction.dz, col, alpha);
-    }
-  }
-
-  void _drawZMarker(Canvas canvas, Offset center, int dz, Color col,
-      double alpha, {double scale = 1.0}) {
-    final radius = cellSize * 0.24 * scale;
-    final stroke = max(1.5, cellSize * 0.07 * scale);
-    final paint = Paint()
-      ..color = col.withAlpha((alpha * 255).toInt())
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-
-    canvas.drawCircle(center, radius, paint);
-
-    if (dz > 0) {
-      // Forward, diving into the board: ⊗
-      final d = radius * 0.55;
-      final line = Paint()
-        ..color = col.withAlpha((alpha * 255).toInt())
-        ..strokeWidth = stroke
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(center - Offset(d, d), center + Offset(d, d), line);
-      canvas.drawLine(center - Offset(d, -d), center + Offset(d, -d), line);
-    } else {
-      // Back, coming out of the board: ⊙
-      canvas.drawCircle(
-          center,
-          radius * 0.35,
-          Paint()..color = col.withAlpha((alpha * 255).toInt()));
+      _drawHead(canvas, last.dx, last.dy, vx, vy, hw, hl, col, alpha);
     }
   }
 
@@ -372,10 +425,9 @@ class BoardPainter extends CustomPainter {
     final arrow = board.arrows[id];
     if (arrow == null) return;
 
-    final head = arrow.getHead().position;
-    if (head.z != activeLayer) return;
-    final cx = (head.x - minX) * cellSize + cellSize / 2;
-    final cy = (head.y - minY) * cellSize + cellSize / 2;
+    final center = projection.centerOf(arrow.getHead().position);
+    final cx = center.dx;
+    final cy = center.dy;
 
     final radius = cellSize * (0.55 + 0.15 * highlightPulse);
     final paint = Paint()
@@ -401,21 +453,24 @@ class BoardPainter extends CustomPainter {
       );
       final head = arrow.getHead().position;
       final direction = arrow.getDirection();
-      // Only heads on the visible layer, and only planar exits — a
-      // Z-exit has no on-screen line to draw (its ⊙/⊗ head already says
-      // where it goes).
-      if (head.z != activeLayer || direction.dz != 0) continue;
       final distance = board.shape.distanceToExit(head, direction);
       if (distance <= 0) continue;
 
-      final startX = (head.x - minX) * cellSize +
-          cellSize / 2 +
-          direction.dx * cellSize * 0.3;
-      final startY = (head.y - minY) * cellSize +
-          cellSize / 2 +
-          direction.dy * cellSize * 0.3;
-      final endX = startX + direction.dx * cellSize * distance;
-      final endY = startY + direction.dy * cellSize * distance;
+      // Both endpoints go through the cascade projection, so Z exits get
+      // a diagonal line toward their destination layer, same as any
+      // planar exit gets its straight one.
+      final headCenter = projection.centerOf(head);
+      final exitCenter = projection.centerOf(Position(
+        head.x + direction.dx * distance,
+        head.y + direction.dy * distance,
+        head.z + direction.dz * distance,
+      ));
+      final (vx, vy) = projection.screenVector(
+          direction.dx, direction.dy, direction.dz);
+      final startX = headCenter.dx + vx * cellSize * 0.3;
+      final startY = headCenter.dy + vy * cellSize * 0.3;
+      final endX = exitCenter.dx;
+      final endY = exitCenter.dy;
 
       final paint = Paint()
         ..color = color.withAlpha((gridOverlayOpacity * 200).round())
@@ -434,19 +489,12 @@ class BoardPainter extends CustomPainter {
     if (smashing == null) return;
 
     for (final smash in smashing) {
-      if (smash.cells.isNotEmpty && smash.cells.first.z != activeLayer) {
-        continue;
-      }
       final color = Color(
         int.parse(smash.color.replaceFirst('#', ''), radix: 16) |
             0xFF000000,
       );
-      final cellCenters = smash.cells.map((pos) {
-        final x = pos.x - minX;
-        final y = pos.y - minY;
-        return Offset(
-            x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
-      }).toList();
+      final cellCenters =
+          smash.cells.map(projection.centerOf).toList();
 
       final scale = (1 - smash.progress).clamp(0.0, 1.0);
       if (scale <= 0) continue;
@@ -484,16 +532,19 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  void _drawHead(Canvas canvas, double hx, double hy, Direction vec,
+  /// Draws the triangular head pointing along the screen-space unit
+  /// vector (vx, vy) — an axis for planar arrows, the cascade diagonal
+  /// for Z-axis ones.
+  void _drawHead(Canvas canvas, double hx, double hy, double vx, double vy,
       double hw, double hl, Color col, double alpha) {
-    final tx = hx + vec.dx * hl * 0.65;
-    final ty = hy + vec.dy * hl * 0.65;
+    final tx = hx + vx * hl * 0.65;
+    final ty = hy + vy * hl * 0.65;
 
-    final bx = hx - vec.dx * hl * 0.40;
-    final by = hy - vec.dy * hl * 0.40;
+    final bx = hx - vx * hl * 0.40;
+    final by = hy - vy * hl * 0.40;
 
-    final ppx = -vec.dy.toDouble();
-    final ppy = vec.dx.toDouble();
+    final ppx = -vy;
+    final ppy = vx;
 
     final path = Path()
       ..moveTo(tx, ty)
@@ -516,8 +567,7 @@ class BoardPainter extends CustomPainter {
         oldDelegate.highlightArrowId != highlightArrowId ||
         oldDelegate.highlightPulse != highlightPulse ||
         oldDelegate.gridOverlayOpacity != gridOverlayOpacity ||
-        oldDelegate.smashingArrows != smashingArrows ||
-        oldDelegate.activeLayer != activeLayer;
+        oldDelegate.smashingArrows != smashingArrows;
   }
 }
 
