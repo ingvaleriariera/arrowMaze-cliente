@@ -6,7 +6,7 @@ import 'package:ditredi/ditredi.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
-import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart' show ExitingArrowAnim, SmashingArrowAnim;
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart' show ExitingArrowAnim, FlashType, SmashingArrowAnim;
 
 class Board3DEngineView extends StatefulWidget {
   final Board board;
@@ -15,6 +15,7 @@ class Board3DEngineView extends StatefulWidget {
   final int cols;
   final int rows;
   final List<ExitingArrowAnim> exitingArrows;
+  final Map<String, FlashType> flashMap;
 
   /// Hint power-up target + pulse (0..1), mirrors BoardPainter's fields.
   final String? highlightArrowId;
@@ -36,6 +37,7 @@ class Board3DEngineView extends StatefulWidget {
     required this.cols,
     required this.rows,
     this.exitingArrows = const [],
+    this.flashMap = const {},
     this.highlightArrowId,
     this.highlightPulse = 0,
     this.gridOverlayOpacity = 0,
@@ -321,7 +323,13 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
       final arrow = entry.value;
 
       final colorValue = int.parse(arrow.color.value.replaceFirst('#', ''), radix: 16) | 0xFF000000;
-      final arrowColor = Color(colorValue);
+      final baseColor = Color(colorValue);
+      final flash = widget.flashMap[arrowId];
+      final arrowColor = flash == FlashType.fail
+          ? const Color(0xFFFF3366)
+          : flash == FlashType.ok
+              ? const Color(0xFF00F5A0)
+              : baseColor;
       final dir = arrow.getDirection();
 
       List<vector.Vector3> rawPoints = [];

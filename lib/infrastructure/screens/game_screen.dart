@@ -614,6 +614,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                         cols: cols,
                         rows: rows,
                         exitingArrows: _buildExitingAnimList(),
+                        flashMap: gameState.flashMap,
                         highlightArrowId: _hintArrowId,
                         highlightPulse: _hintController?.value ?? 0,
                         gridOverlayOpacity: _gridOverlayOpacity,
