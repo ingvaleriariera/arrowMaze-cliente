@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_builder.dart';
 import 'package:arrow_maze_cliente_copy/domain/builders/board_generation_request.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/board.dart';
+import 'package:arrow_maze_cliente_copy/domain/entities/board_shape.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_session.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_level_repository.dart';
@@ -12,14 +13,25 @@ class LoadLevelUseCase {
   final IBoardCache boardCache;
   final ITimeLimitPolicy timeLimitPolicy;
 
+  /// Extrusion depth for every board this use case builds (1 = flat,
+  /// kBoardDepth3D = 6-connection prisms). Injected so the setting is a
+  /// provider-level concern, not something the use case reads itself.
+  final int boardDepth;
+
   LoadLevelUseCase({
     required this.levelRepository,
     required this.boardCache,
     required this.timeLimitPolicy,
+    this.boardDepth = kBoardDepth,
   });
 
+  /// Cached layouts are only valid for the depth they were generated at —
+  /// a flat layout replayed onto a prism (or vice versa) would desync the
+  /// graph from the arrows, so the cache key carries the depth.
+  String _cacheKey(String levelId) => '$levelId#d$boardDepth';
+
   Future<GameSession> execute(String levelId) async {
-    debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId');
+    debugPrint('🎮 LoadLevelUseCase.execute: Loading levelId=$levelId (depth $boardDepth)');
 
     final level = await levelRepository.getLevel(levelId);
     debugPrint('   Level loaded: ${level.id}');
@@ -31,12 +43,19 @@ class LoadLevelUseCase {
     // level or from PreloadLevelsUseCase) skips straight to the cheap,
     // synchronous step of building a fresh, unplayed Board from the
     // already-known layout.
-    final cachedLayout = boardCache.get(levelId);
+    final cachedLayout = boardCache.get(_cacheKey(levelId));
     final Board board;
     final int calculatedMaxMoves;
     if (cachedLayout != null) {
       debugPrint('⚡ LoadLevelUseCase: Reusing cached arrow layout for $levelId');
-      board = BoardBuilder.fromArrows(level.getBoardShape(), cachedLayout);
+      // Same extrusion as the generation path (generateBoard): cached
+      // arrows were generated on the extruded shape, so the graph must be
+      // rebuilt on the extruded shape too — a flat shape here would strip
+      // the upper layers from the blocking rules.
+      board = BoardBuilder.fromArrows(
+        BoardShape.extrude(level.getBoardShape(), boardDepth),
+        cachedLayout,
+      );
       calculatedMaxMoves =
           BoardBuilder.calculateMaxMoves(board.arrows.length, level.difficulty.toUpperCase());
     } else {
@@ -53,11 +72,12 @@ class LoadLevelUseCase {
           seed: level.id.hashCode,
           boardLayoutJson: level.boardLayout,
           difficulty: level.difficulty,
+          depth: boardDepth,
         ),
       );
       board = result.board;
       calculatedMaxMoves = result.maxMoves;
-      boardCache.put(levelId, board.arrows.values.toList());
+      boardCache.put(_cacheKey(levelId), board.arrows.values.toList());
     }
     debugPrint('✅ LoadLevelUseCase: Board built with ${board.arrows.length} arrows');
     debugPrint('   Calculated maxMoves: $calculatedMaxMoves (margin for ${level.difficulty})');

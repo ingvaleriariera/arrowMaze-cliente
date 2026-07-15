@@ -18,8 +18,9 @@ import 'package:arrow_maze_cliente_copy/domain/states/defeat_state.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/direction.dart';
 import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
-import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_viewport.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_engine_view.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_projection.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/power_up_bar.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
@@ -384,6 +385,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final l10n = AppLocalizations.of(context);
     final gameState = ref.watch(gameNotifierProvider);
     final gameNotifier = ref.read(gameNotifierProvider.notifier);
+    final board3D = ref.watch(
+        settingsNotifierProvider.select((s) => s.board3DEnabled));
 
     debugPrint('🎨 GameScreen.build:');
     debugPrint('   isLoading=${gameState.isLoading}');
@@ -477,13 +480,19 @@ class _GameScreenState extends ConsumerState<GameScreen>
           ],
         ),
         actions: [
+          if (board3D)
+            IconButton(
+              icon: const Icon(Icons.grid_3x3),
+              tooltip: l10n.translate('showSkeleton'),
+              onPressed: gameState.session == null ? null : _startGridOverlayAnimation,
+            ),
           IconButton(
             icon: const Icon(Icons.pause),
             onPressed: gameState.session == null ? null : () => setState(() => _showPause = true),
           ),
         ],
       ),
-      body: _buildBody(gameState, gameNotifier, l10n),
+      body: _buildBody(gameState, gameNotifier, l10n, board3D),
       ),
     );
   }
@@ -521,7 +530,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
-  Widget _buildBody(GameState gameState, GameNotifier gameNotifier, AppLocalizations l10n) {
+  Widget _buildBody(GameState gameState, GameNotifier gameNotifier, AppLocalizations l10n, bool board3D) {
     if (gameState.error != null) {
       return Center(child: Text('Error: ${gameState.error}'));
     }
@@ -573,15 +582,65 @@ class _GameScreenState extends ConsumerState<GameScreen>
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final cellSize = (constraints.maxWidth / cols).clamp(20.0, 200.0);
-                  final gridWidth = cellSize * cols;
-                  final gridHeight = cellSize * rows;
+                  // Cascade view (3D game): the canvas grows by the layer
+                  // offsets, so the cell size shrinks just enough for the
+                  // whole stack to fit the width.
+                  final maxZ = board.shape.maxZ();
+                  final cellSize = (constraints.maxWidth /
+                          (cols + maxZ * BoardProjection.depthStep))
+                      .clamp(20.0, 200.0);
+                  final projection = BoardProjection(
+                    cellSize: cellSize,
+                    minX: minX,
+                    minY: minY,
+                    maxZ: maxZ,
+                  );
+                  final canvasSize = projection.canvasSize(cols, rows);
+                  final gridWidth = canvasSize.width;
+                  final gridHeight = canvasSize.height;
 
-                  // In 3D mode a one-finger drag means "rotate the board",
-                  // so the viewer's own panning is turned off to keep the
-                  // gesture unambiguous; pinch-zoom works in both modes.
-                  final board3D = ref.watch(
-                      settingsNotifierProvider.select((s) => s.board3DEnabled));
+                  if (board3D) {
+                    return Container(
+                      color: const Color(0xFF0d0d18),
+                      child: Board3DEngineView(
+                        board: board,
+                        activatableArrows: activatableSet,
+                        cols: cols,
+                        rows: rows,
+                        exitingArrows: _buildExitingAnimList(),
+                        highlightArrowId: _hintArrowId,
+                        highlightPulse: _hintController?.value ?? 0,
+                        gridOverlayOpacity: _gridOverlayOpacity,
+                        smashingArrows: _buildSmashingAnimList(),
+                        onArrowTapped: (arrowId) {
+                          debugPrint('🎯 DiTreDi Arrow tapped: $arrowId');
+
+                          if (_pendingPowerUp == 'HAMMER') {
+                            final arrow = board.arrows[arrowId];
+                            setState(() => _pendingPowerUp = null);
+                            if (arrow == null) return;
+                            gameNotifier
+                                .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
+                                .then((result) {
+                              _handlePowerUpResult(result);
+                              if (result != null && result.success) {
+                                _startSmashAnimation(arrow);
+                              }
+                            });
+                            return;
+                          }
+
+                          if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
+                            final arrow = board.arrows[arrowId];
+                            if (arrow != null) {
+                              _startExitAnimation(arrow, shape);
+                            }
+                          }
+                          gameNotifier.activateArrow(arrowId);
+                        },
+                      ),
+                    );
+                  }
 
                   return Container(
                     color: const Color(0xFF0d0d18),
@@ -590,28 +649,26 @@ class _GameScreenState extends ConsumerState<GameScreen>
                       maxScale: 3.0,
                       boundaryMargin: const EdgeInsets.all(200),
                       constrained: true,
-                      panEnabled: !board3D,
+                      panEnabled: true,
                       scaleEnabled: true,
                       transformationController: _transformationController,
-                      child: Board3DViewport(
-                        enabled: board3D,
-                        child: Center(
+                      child: Center(
                         child: SizedBox(
                           width: gridWidth,
                           height: gridHeight,
                           child: GestureDetector(
                             onTapDown: (details) {
-                              final gridX = (details.localPosition.dx / cellSize).floor() + minX;
-                              final gridY = (details.localPosition.dy / cellSize).floor() + minY;
-                              debugPrint('🖱️ Tap at ($gridX, $gridY)');
-
-                              final arrowId = board.grid['$gridX,$gridY'];
+                              String? arrowId;
+                              for (int z = maxZ; z >= 0 && arrowId == null; z--) {
+                                final cell = projection.cellAt(
+                                    details.localPosition, z);
+                                if (cell == null) continue;
+                                arrowId = board.grid[cell.toKey()];
+                              }
+                              debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
                               if (arrowId == null) return;
                               debugPrint('🎯 Arrow tapped: $arrowId');
 
-                              // Hammer targeting mode: any arrow can be the
-                              // target, blocked or not — that's the whole
-                              // point of the hammer, unlike a normal tap.
                               if (_pendingPowerUp == 'HAMMER') {
                                 final arrow = board.arrows[arrowId];
                                 setState(() => _pendingPowerUp = null);
@@ -652,7 +709,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               size: Size(gridWidth, gridHeight),
                             ),
                           ),
-                        ),
                         ),
                       ),
                     ),

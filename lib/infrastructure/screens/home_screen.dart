@@ -43,14 +43,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     final userId = ref.read(authNotifierProvider).userId;
     if (userId == null) return;
 
+    try {
+      final progress = await ref.read(getLocalProgressUseCaseProvider).execute(userId);
+      await ref.read(livesNotifierProvider.notifier).load(userId);
+      await ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId);
+      if (!mounted) return;
+      setState(() {
+        _progress = progress;
+        _isLoading = false;
+      });
+    } catch (e) {
+      // An unguarded throw anywhere in this chain used to leave
+      // _isLoading stuck true forever (spinner never resolves until the
+      // next full remount) — any failure here must still release it.
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Re-reads local progress (coins) without re-triggering the lives or
+  /// level-summaries loads — used after any action elsewhere (buying a
+  /// life) that spends coins while this screen stays mounted, since
+  /// [_progress] is otherwise a one-shot snapshot from [_load].
+  Future<void> _refreshProgress() async {
+    final userId = ref.read(authNotifierProvider).userId;
+    if (userId == null) return;
     final progress = await ref.read(getLocalProgressUseCaseProvider).execute(userId);
-    await ref.read(livesNotifierProvider.notifier).load(userId);
-    await ref.read(levelSelectNotifierProvider.notifier).loadSummaries(userId);
     if (!mounted) return;
-    setState(() {
-      _progress = progress;
-      _isLoading = false;
-    });
+    setState(() => _progress = progress);
   }
 
   /// The level the player left off at: first unlocked-but-not-completed
@@ -72,7 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   void _playCurrentLevel(LevelSummaryDTO level, int number) {
     if (!ref.read(livesNotifierProvider).canPlay) {
-      showNoLivesDialog(context);
+      showNoLivesDialog(context).then((_) => _refreshProgress());
       return;
     }
     context.push('/game/${level.levelId}', extra: {
@@ -136,7 +156,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             // Tappable: opens the lives dialog, which is also where a
             // life can be bought with coins before hitting zero.
             return InkWell(
-              onTap: () => showNoLivesDialog(context),
+              onTap: () => showNoLivesDialog(context).then((_) => _refreshProgress()),
               borderRadius: BorderRadius.circular(8),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),

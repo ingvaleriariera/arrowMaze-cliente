@@ -68,18 +68,25 @@ class AudioServiceImpl implements IAudioService {
       return;
     }
 
-    try {
-      // If the same track is already playing, do nothing
-      if (_currentMusicTrack == track) {
-        debugPrint('ℹ️  AudioServiceImpl: Music "$track" already playing, skipping');
-        return;
-      }
+    // If the same track is already playing — or already being started by
+    // an in-flight call — do nothing. Home and LevelSelectScreen both call
+    // this on every mount (e.g. every tab switch), so without claiming the
+    // track BEFORE the first await, two near-simultaneous calls could both
+    // pass this check and race each other's stop()+play() — audibly
+    // restarting the track on every switch instead of a clean no-op.
+    if (_currentMusicTrack == track) {
+      debugPrint('ℹ️  AudioServiceImpl: Music "$track" already playing, skipping');
+      return;
+    }
+    final previousTrack = _currentMusicTrack;
+    _currentMusicTrack = track;
 
+    try {
       debugPrint('🎵 AudioServiceImpl: Playing music "$track"');
       final assetPath = _getAssetPath(track);
 
       // Stop current music first if something is playing
-      if (_currentMusicTrack != null) {
+      if (previousTrack != null) {
         await _musicPlayer.stop();
       }
 
@@ -93,11 +100,14 @@ class AudioServiceImpl implements IAudioService {
       await _musicPlayer.setAsset(assetPath);
       await _musicPlayer.play();
 
-      _currentMusicTrack = track;
-
       debugPrint('✅ AudioServiceImpl: Music "$track" started (looping)');
     } catch (e) {
       debugPrint('❌ AudioServiceImpl.playMusic: Error playing "$track" - $e');
+      // Roll back so a later retry isn't permanently deduped against a
+      // track that never actually started.
+      if (_currentMusicTrack == track) {
+        _currentMusicTrack = previousTrack;
+      }
     }
   }
 
