@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/i_game_progress_local_store.dart';
 
-class GameProgressDatabase {
+class GameProgressDatabase implements IGameProgressLocalStore {
   static const _databaseName = 'arrow_maze.db';
   static const _tableName = 'game_progress';
   static const _version = 1;
@@ -47,6 +48,7 @@ class GameProgressDatabase {
     );
   }
 
+  @override
   Future<Map<String, dynamic>?> getProgress(String userId) async {
     try {
       debugPrint('📖 GameProgressDatabase.getProgress: Reading $userId from sqflite');
@@ -70,6 +72,7 @@ class GameProgressDatabase {
     }
   }
 
+  @override
   Future<void> saveProgress(
     String userId,
     List<String> completedLevels,
@@ -101,6 +104,7 @@ class GameProgressDatabase {
     }
   }
 
+  @override
   Future<void> deleteProgress(String userId) async {
     try {
       debugPrint('🗑️  GameProgressDatabase.deleteProgress: Deleting $userId');
@@ -117,6 +121,7 @@ class GameProgressDatabase {
     }
   }
 
+  @override
   Future<void> closeDatabase() async {
     if (_database != null && _database!.isOpen) {
       await _database!.close();

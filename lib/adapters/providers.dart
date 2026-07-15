@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arrow_maze_cliente_copy/adapters/api/api_client.dart';
 import 'package:arrow_maze_cliente_copy/adapters/notifiers/locale_notifier.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/level_mapper.dart';
@@ -15,6 +17,8 @@ import 'package:arrow_maze_cliente_copy/adapters/repositories/auth_repository_im
 import 'package:arrow_maze_cliente_copy/adapters/repositories/audio_service_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_database.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_repository_impl.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/i_game_progress_local_store.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/web_game_progress_store.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/in_memory_board_cache.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/leaderboard_repository_impl.dart';
 import 'package:arrow_maze_cliente_copy/adapters/repositories/score_repository_impl.dart';
@@ -118,7 +122,19 @@ final audioObserverProvider = Provider((ref) => AudioObserver(
 
 final biometricServiceProvider = Provider((ref) => BiometricService());
 
-final gameProgressDatabaseProvider = Provider((ref) => GameProgressDatabase());
+// Web has no sqflite backend, so gameProgressRepositoryProvider gets a
+// shared_preferences-backed store there instead; mobile keeps using
+// GameProgressDatabase exactly as before. sharedPreferencesProvider must
+// be overridden in main.dart before runApp() on web — see there.
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError(
+    'sharedPreferencesProvider has no default — override it in main.dart '
+    'with a resolved SharedPreferences instance before runApp() on web.',
+  );
+});
+
+final gameProgressDatabaseProvider = Provider<IGameProgressLocalStore>((ref) =>
+    kIsWeb ? WebGameProgressStore(ref.watch(sharedPreferencesProvider)) : GameProgressDatabase());
 
 // In-memory cache of pre-generated boards, shared by LoadLevelUseCase
 // (consumer) and PreloadLevelsUseCase (producer). Kept alive for the app's

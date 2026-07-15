@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:arrow_maze_cliente_copy/adapters/api/api_client.dart';
 import 'package:arrow_maze_cliente_copy/adapters/mappers/progress_mapper.dart';
-import 'package:arrow_maze_cliente_copy/adapters/repositories/game_progress_database.dart';
+import 'package:arrow_maze_cliente_copy/adapters/repositories/i_game_progress_local_store.dart';
 import 'package:arrow_maze_cliente_copy/domain/entities/game_progress.dart';
 import 'package:arrow_maze_cliente_copy/domain/ports/i_game_progress_repository.dart';
 
 class GameProgressRepositoryImpl implements IGameProgressRepository {
   final ApiClient apiClient;
   final ProgressMapper progressMapper;
-  final GameProgressDatabase database;
+  final IGameProgressLocalStore database;
 
   // In-memory cache (optimization layer on top of sqflite)
   final Map<String, GameProgress> _localCache = {};
