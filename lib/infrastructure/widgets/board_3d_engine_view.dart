@@ -98,10 +98,17 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
       final p2 = curr + (dNext * cornerRadius);
 
       smoothed.add(p1);
-      
-      // 4 subdivisions is enough for a small, tight corner
-      for (int j = 1; j < 4; j++) {
-        final t = j / 4.0;
+
+      // Each pair of consecutive subdivision points is drawn as its own
+      // flat quad (ditredi's Line3D has no mitered joints between
+      // segments), so the angle between them leaves a small wedge-shaped
+      // gap of background color at the joint — worse with fewer, wider
+      // angle steps. 10 subdivisions keeps the exact same curve shape
+      // (same cornerRadius) but shrinks that per-joint angle enough for
+      // the gaps to disappear, without making the corner itself bigger,
+      // smaller, curvier or straighter.
+      for (int j = 1; j < 10; j++) {
+        final t = j / 10.0;
         final invT = 1.0 - t;
         final curvePoint = (p1 * (invT * invT)) + (curr * (2 * invT * t)) + (p2 * (t * t));
         smoothed.add(curvePoint);
