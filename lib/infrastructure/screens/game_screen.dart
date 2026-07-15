@@ -586,9 +586,15 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   // offsets, so the cell size shrinks just enough for the
                   // whole stack to fit the width.
                   final maxZ = board.shape.maxZ();
-                  final cellSize = (constraints.maxWidth /
-                          (cols + maxZ * BoardProjection.depthStep))
-                      .clamp(20.0, 200.0);
+                  // Fit both axes: on tall boards (like level 11) the grid
+                  // would overflow vertically when only maxWidth is used,
+                  // making bottom arrows unreachable on web.
+                  final cellFromWidth = constraints.maxWidth /
+                      (cols + maxZ * BoardProjection.depthStep);
+                  final cellFromHeight = constraints.maxHeight /
+                      (rows + maxZ * BoardProjection.depthStep);
+                  final cellSize =
+                      min(cellFromWidth, cellFromHeight).clamp(20.0, 200.0);
                   final projection = BoardProjection(
                     cellSize: cellSize,
                     minX: minX,
