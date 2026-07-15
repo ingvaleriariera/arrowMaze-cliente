@@ -134,6 +134,12 @@ class AppLocalizations {
       'deleteBoardMessage': 'It will be removed from the community for everyone.',
       'boardDeleted': 'Board deleted',
       'boardDeleteFailed': 'Could not delete the board',
+      'Email already registered': 'Email already registered',
+      'Username already registered': 'Username already registered',
+      'Email already exists': 'Email already exists',
+      'Username already exists': 'Username already exists',
+      'User already exists': 'User already exists',
+      'Invalid credentials': 'Invalid credentials',
     },
     'es': {
       'gameTitle': 'Laberinto de Flechas',
@@ -263,6 +269,12 @@ class AppLocalizations {
       'deleteBoardMessage': 'Se quitará de la comunidad para todos.',
       'boardDeleted': 'Tablero eliminado',
       'boardDeleteFailed': 'No se pudo eliminar el tablero',
+      'Email already registered': 'El correo electrónico ya está registrado',
+      'Username already registered': 'El nombre de usuario ya está registrado',
+      'Email already exists': 'El correo electrónico ya está registrado',
+      'Username already exists': 'El nombre de usuario ya está registrado',
+      'User already exists': 'El usuario ya está registrado',
+      'Invalid credentials': 'Credenciales inválidas',
     },
   };
 
