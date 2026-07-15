@@ -15,7 +15,6 @@ class SettingsState {
 
   /// The 6-connection 3D GAME (not just the view): boards are extruded
   /// into 4-layer prisms, arrows can travel and exit along the Z axis,
-  /// and GameScreen shows a layer selector to see/tap each floor.
   final bool game3DEnabled;
 
   const SettingsState({

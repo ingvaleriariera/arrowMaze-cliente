@@ -33,7 +33,7 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (_) => settingsNotifier.toggleVibration(),
           ),
           SwitchListTile(
-            secondary: const Icon(Icons.view_in_ar, color: Color(0xFF00F5A0)),
+            secondary: const Icon(Icons.threed_rotation, color: Color(0xFF00F5A0)),
             title: Text(l10n.translate('board3d')),
             subtitle: Text(l10n.translate('board3dDescription')),
             value: settingsState.board3DEnabled,
