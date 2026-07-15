@@ -23,8 +23,20 @@ note as N1
      logging, auth y errores.
   3. Configuración del framework:
      enrutamiento, i18n, Riverpod root.
-  4. Frameworks externos (sqflite, Dio,
-     flutter_secure_storage, just_audio).
+  4. Servicios de plataforma: biometría.
+  5. Frameworks externos (sqflite, Dio,
+     flutter_secure_storage, just_audio,
+     shared_preferences, local_auth,
+     ditredi para el modo 3D).
+end note
+
+note as N2
+  Clases de Capa 3 referenciadas aquí
+  (GameNotifier, AuthNotifier, LivesNotifier,
+  BoardsNotifier, LevelSelectNotifier,
+  LeaderboardNotifier, SettingsNotifier,
+  IAuthRepository) no se redibujan — ya
+  están detalladas en el diagrama de C3.
 end note
 
 ' ─────────────────────────────────────────
@@ -32,220 +44,738 @@ end note
 ' ─────────────────────────────────────────
 
 class AuthInterceptor <<AOP-Auth>> {
-  - authRepository: IAuthRepository
+  + authRepository: IAuthRepository
   --
-  + onRequest(options: RequestOptions): void
-  + onError(error: DioError): void
+  + onRequest(options: RequestOptions, handler: RequestInterceptorHandler): void
+  + onError(err: DioException, handler: ErrorInterceptorHandler): void
 }
 
 class LoggingInterceptor <<AOP-Logging>> {
   --
-  + onRequest(options: RequestOptions): void
-  + onResponse(response: Response): void
-  + onError(error: DioError): void
+  + onRequest(options: RequestOptions, handler: RequestInterceptorHandler): void
+  + onResponse(response: Response, handler: ResponseInterceptorHandler): void
+  + onError(err: DioException, handler: ErrorInterceptorHandler): void
 }
 
 class ErrorInterceptor <<AOP-Exception>> {
+  - _extractErrorMessage(err: DioException): String?
   --
-  + onError(error: DioError): void
+  + onError(err: DioException, handler: ErrorInterceptorHandler): void
 }
 
 note right of AuthInterceptor
   Patrón AOP (Aspecto de Seguridad).
   onRequest() → inyecta el JWT header
-  en cada request automáticamente.
-  onError() → si recibe 401, limpia
-  la sesión y redirige al login.
+  (Bearer token) en cada request.
+  onError() → si recibe 401, llama
+  authRepository.logout().
 end note
 
 note right of LoggingInterceptor
   Patrón AOP (Aspecto de Logging).
-  Registra request/response/error
-  de cada llamada HTTP.
-  Solo activo en modo debug.
+  Registra request/response/error de
+  cada llamada HTTP (URL, headers, body).
+  Solo activo en kDebugMode.
 end note
 
 note right of ErrorInterceptor
   Patrón AOP (Aspecto de Excepciones).
-  Convierte errores HTTP (400, 404, 500,
-  timeout, sin conexión) en excepciones
-  tipadas que los notifiers manejan.
+  Mapea DioExceptionType/statusCode a
+  excepciones tipadas (400→BadRequest,
+  401→Unauthorized, 404→NotFound,
+  500→Server, timeout→Network) y
+  reemplaza el DioException original
+  por uno que las envuelve.
+end note
+
+' ─────────────────────────────────────────
+' EXCEPCIONES DE INFRAESTRUCTURA
+' ─────────────────────────────────────────
+
+class AppException {
+  + message: String
+  --
+  + AppException(message: String)
+  + toString(): String
+}
+
+class BadRequestException {
+  + BadRequestException(message: String)
+}
+class UnauthorizedException {
+  + UnauthorizedException(message: String)
+}
+class NotFoundException {
+  + NotFoundException(message: String)
+}
+class ServerException {
+  + ServerException(message: String)
+}
+class NetworkException {
+  + NetworkException(message: String)
+}
+
+note bottom of AppException
+  infrastructure/exceptions/app_exceptions.dart.
+  Ojo: ErrorInterceptor importa la jerarquía
+  homónima de domain/exceptions/app_exceptions.dart
+  (misma forma, mismos nombres) — no esta clase.
+  Posible duplicado a unificar.
+end note
+
+BadRequestException  --|> AppException
+UnauthorizedException --|> AppException
+NotFoundException     --|> AppException
+ServerException       --|> AppException
+NetworkException      --|> AppException
+
+' ─────────────────────────────────────────
+' MAPPERS DE INFRAESTRUCTURA
+' ─────────────────────────────────────────
+
+class ValidationErrorMapper {
+  + {static} toTranslationKey(errorType: ValidationErrorType): String
+}
+
+note right of ValidationErrorMapper
+  Traduce ValidationErrorType (dominio,
+  AuthValidator) a la clave i18n que
+  consume AppLocalizations. Usado por
+  LoginScreen y RegisterScreen para
+  mostrar errores de formulario.
+end note
+
+' ─────────────────────────────────────────
+' SERVICIOS DE PLATAFORMA
+' ─────────────────────────────────────────
+
+class BiometricService {
+  - _localAuth: LocalAuthentication
+  --
+  + isBiometricAvailable(): Future<bool>
+  + isFaceIDAvailable(): Future<bool>
+  + authenticate(): Future<bool>
+}
+
+note right of BiometricService
+  Envuelve el paquete local_auth (C4).
+  authenticate() pide Face ID/huella con
+  stickyAuth + biometricOnly. Usado por
+  AuthNotifier (C3) para el login
+  biométrico con email prellenado.
 end note
 
 ' ─────────────────────────────────────────
 ' CONFIGURACIÓN — App entry point
 ' ─────────────────────────────────────────
 
-class MyApp {
-  --
-  + build(): Widget
+class ApiConfig {
+  + {static} apiBaseUrl: String
+  + {static} apiPort: int
+  + {static} apiProtocol: String
+  + {static} apiHost: String
+  + {static} requestTimeoutSeconds: int
+  + {static} connectionTimeoutSeconds: int
 }
+
+note right of ApiConfig
+  apiBaseUrl se resuelve por
+  --dart-define-from-file en build time
+  (nunca hardcodeada por dev) — cae a
+  localhost:3000 si no se define.
+end note
+
+class MyApp <<ConsumerWidget>> {
+  --
+  + build(context: BuildContext, ref: WidgetRef): Widget
+}
+
+note right of MyApp
+  Cablea los interceptores de Dio en
+  ApiClient (Auth, Logging, Error) y
+  observa localeNotifierProvider (C3)
+  para el locale activo de MaterialApp.
+end note
 
 class AppRouter {
-  --
-  + {static} routes: List<RouteBase>
-  + {static} navigateTo(route: String): void
-  + {static} replace(route: String): void
+  + {static} router: GoRouter
 }
 
+note right of AppRouter
+  Rutas: / (Splash), /login, /register,
+  /home, /profile, /levels, /boards,
+  /boards/editor, /game/:levelId,
+  /victory, /defeat, /leaderboard,
+  /settings. Usa go_router (C4).
+end note
+
 class AppLocalizations {
+  + locale: Locale
   --
+  + AppLocalizations(locale: Locale)
+  + translate(key: String): String
   + {static} of(context: BuildContext): AppLocalizations
-  + gameTitle(): String
-  + levelSelect(): String
-  + victory(): String
-  + defeat(): String
-  + retry(): String
-  + moves(): String
-  + score(): String
+}
+
+class AppLocalizationsDelegate {
+  --
+  + isSupported(locale: Locale): bool
+  + load(locale: Locale): Future<AppLocalizations>
+  + shouldReload(old: AppLocalizationsDelegate): bool
 }
 
 note right of AppLocalizations
-  i18n — soporte mínimo español + inglés
-  (requisito del enunciado).
+  i18n — español + inglés completo
+  (textos de juego, auth, power-ups,
+  vidas, tableros custom, modo 3D).
   Usa flutter_localizations (C4).
 end note
 
+AppLocalizationsDelegate ..> AppLocalizations : <<creates>>
+
 ' ─────────────────────────────────────────
-' SCREENS — Widgets Flutter
+' SCREENS — Autenticación y arranque
 ' ─────────────────────────────────────────
 
-class SplashScreen {
-  - authNotifier: AuthNotifier
+class SplashScreen <<ConsumerStatefulWidget>> {
+  - _checkAuthentication(): Future<void>
   --
   + build(): Widget
 }
 
 note right of SplashScreen
-  Verifica si hay sesión activa.
-  Redirige a LevelSelectScreen
-  o LoginScreen según el estado
-  de AuthNotifier.
+  Llama authNotifier.checkAuth() y
+  redirige a /home o /login según
+  isAuthenticated.
 end note
 
-class LoginScreen {
-  - authNotifier: AuthNotifier
+class LoginScreen <<ConsumerStatefulWidget>> {
+  - _emailOrUsernameError: String?
+  - _canUseFaceIdForEmail: bool
+  - _prefillSavedEmail(): Future<void>
+  - _checkFaceIdForEmail(email: String): Future<void>
+  - _canLogin(): bool
+  - _handleLogin(): void
+  - _handleFaceIdLoginWithEmail(): void
   --
   + build(): Widget
-  - onLogin(email: String, password: String): void
-  - onNavigateToRegister(): void
 }
 
-class RegisterScreen {
-  - authNotifier: AuthNotifier
+note right of LoginScreen
+  Login por email o username
+  (AuthValidator.validateEmailOrUsername).
+  Prellena el campo con el email guardado
+  para Face ID y habilita el botón
+  biométrico si faceIdLoginWithEmailUseCase
+  lo permite para ese email.
+end note
+
+class RegisterScreen <<ConsumerStatefulWidget>> {
+  - _emailError: String?
+  - _usernameError: String?
+  - _passwordError: String?
+  - _canRegister(): bool
+  - _handleRegister(): void
   --
   + build(): Widget
-  - onRegister(email: String, username: String, password: String): void
 }
 
-class LevelSelectScreen {
-  - levelSelectNotifier: LevelSelectNotifier
-  - authNotifier: AuthNotifier
+note right of RegisterScreen
+  Valida email/username/password en vivo
+  con AuthValidator + ValidationErrorMapper,
+  muestra PasswordRequirements en tiempo real.
+end note
+
+' ─────────────────────────────────────────
+' SCREENS — Home y perfil
+' ─────────────────────────────────────────
+
+class HomeScreen <<ConsumerStatefulWidget>> {
+  - _progress: GameProgress?
+  - _pulseController: AnimationController
+  - _load(): Future<void>
+  - _refreshProgress(): Future<void>
+  - _currentLevel(allLevels: List<LevelSummaryDTO>): (level, number)?
+  - _playCurrentLevel(level: LevelSummaryDTO, number: int): void
   --
   + build(): Widget
-  - onSelectLevel(levelId: String): void
-  - onNavigateToSettings(): void
-  - onNavigateToLeaderboard(): void
 }
 
-class GameScreen {
-  - gameNotifier: GameNotifier
+note right of HomeScreen
+  Pantalla raíz post-login. Muestra vidas,
+  monedas, avatar, ArrowShowcase decorativo
+  y el botón Play hacia el nivel actual
+  (primer nivel desbloqueado no completado).
+  Con 0 vidas, showNoLivesDialog() bloquea
+  el acceso.
+end note
+
+class ProfileScreen <<ConsumerStatefulWidget>> {
+  - _progress: GameProgress?
+  - _loadProgress(): Future<void>
+  - _chooseAvatar(emoji: String): Future<void>
+  - _openAvatarPicker(): void
   --
   + build(): Widget
-  - onTapArrow(arrowId: String): void
-  - onTapHint(): void
-  - onTapHammer(arrowId: String): void
-  - onTapMagnet(direction: Direction): void
-  - onPause(): void
+}
+
+note right of ProfileScreen
+  Avatar emoji elegible de una paleta fija,
+  estadísticas (niveles completados, score
+  total, monedas) leídas de GameProgress.
+end note
+
+' ─────────────────────────────────────────
+' SCREENS — Niveles y juego
+' ─────────────────────────────────────────
+
+class LevelSelectScreen <<ConsumerStatefulWidget>> {
+  - _maybeAskToPreloadAll(userId: String): Future<void>
+  --
+  + build(): Widget
+  - _buildBody(context: BuildContext, state: LevelSelectState): Widget
+}
+
+note right of LevelSelectScreen
+  Grid de niveles + tableros custom
+  adoptados al final (borde cian).
+  Pregunta una vez por cuenta si el
+  jugador quiere precargar todos los
+  tableros (SharedPreferences flag).
+  Bloquea toques mientras isPreloadingAll.
+end note
+
+class GameScreen <<ConsumerStatefulWidget>> {
+  + levelId: String
+  + difficulty: String?
+  + levelNumber: int?
+  + title: String?
+  - _pendingExits: Map<String, _PendingExit>
+  - _pendingSmashes: Map<String, _PendingSmash>
+  - _transformationController: TransformationController
+  - _loadLevel(): void
+  - _startExitAnimation(arrow: Arrow, shape: BoardShape): void
+  - _startSmashAnimation(arrow: Arrow): void
+  - _startHintAnimation(arrowId: String): void
+  - _startGridOverlayAnimation(): void
+  - _onPowerUpSelected(type: String, ...): Future<void>
+  - _confirmExit({onConfirmed: VoidCallback}): void
+  --
+  + build(): Widget
+  - _buildBody(gameState: GameState, gameNotifier: GameNotifier, l10n: AppLocalizations, board3D: bool): Widget
+  - _buildPauseOverlay(gameNotifier: GameNotifier): Widget
 }
 
 note right of GameScreen
-  El widget más complejo.
-  Observa GameNotifier para:
-  - Dibujar el tablero y las flechas
-  - Mostrar score, moves, timer
-  - Animación de salida de flechas
-  - Navegar a VictoryScreen/DefeatScreen
-    cuando GameSession cambia de estado.
+  El widget más complejo. Orquesta:
+  - BoardPainter (2D) o Board3DEngineView (3D,
+    toggle "Juego 3D" de Configuración)
+  - Animaciones de salida (worm-exit),
+    martillo (smash) e hint/grid power-up
+  - PowerUpBar y confirmación de salida
+    (cuenta como derrota, pide confirmar)
+  - Navega a VictoryScreen/DefeatScreen
+    según el estado de GameSession.
 end note
 
-class VictoryScreen {
-  - gameNotifier: GameNotifier
+class VictoryScreen <<ConsumerWidget>> {
   --
-  + build(): Widget
-  - onNextLevel(): void
-  - onBackToMenu(): void
+  + build(context: BuildContext, ref: WidgetRef): Widget
 }
 
-class DefeatScreen {
-  - gameNotifier: GameNotifier
+class DefeatScreen <<ConsumerWidget>> {
   --
-  + build(): Widget
-  - onRetry(): void
-  - onBackToMenu(): void
+  + build(context: BuildContext, ref: WidgetRef): Widget
 }
 
-class LeaderboardScreen {
-  - leaderboardNotifier: LeaderboardNotifier
+note right of DefeatScreen
+  Muestra el conteo de vidas restantes
+  (livesNotifierProvider) además del
+  score y los botones de reintentar/volver.
+end note
+
+class LeaderboardScreen <<ConsumerStatefulWidget>> {
+  - _selectedLevelId: String?
+  - _availableLevelIds: List<String>
+  - _loadLevelsAndLeaderboard(): void
   --
   + build(): Widget
-  - onSelectLevel(levelId: String): void
+  - _buildLeaderboardBody(entries, l10n): Widget
+  - _buildPodium(top3: List): Widget
 }
 
-class SettingsScreen {
-  - settingsNotifier: SettingsNotifier
+note right of LeaderboardScreen
+  Alterna entre modo "por nivel" y
+  "global" (SegmentedButton). Dibuja
+  podio top-3 + lista para el resto.
+end note
+
+class SettingsScreen <<ConsumerWidget>> {
+  --
+  + build(context: BuildContext, ref: WidgetRef): Widget
+}
+
+note right of SettingsScreen
+  Toggles: sonido, vibración, tablero 3D
+  (perspectiva), juego 3D (6 direcciones/
+  ditredi), idioma (es/en), logout.
+end note
+
+' ─────────────────────────────────────────
+' SCREENS — Tableros de la comunidad
+' ─────────────────────────────────────────
+
+class BoardsScreen <<ConsumerStatefulWidget>> {
+  - _play(board: CustomBoardDTO): void
+  - _confirmDeleteOwn(l10n: AppLocalizations, board: CustomBoardDTO): void
   --
   + build(): Widget
-  - onToggleMute(): void
-  - onSelectLanguage(locale: String): void
+  - _buildCommunityTab(l10n, state): Widget
+  - _buildMineTab(l10n, state): Widget
+  - _boardCard(l10n, board, {trailing, onTap}): Widget
 }
+
+note right of BoardsScreen
+  Dos pestañas: Comunidad (adoptar/eliminar
+  los propios) y Míos (jugar/quitar).
+  FAB abre BoardEditorScreen.
+end note
+
+class BoardEditorScreen <<ConsumerStatefulWidget>> {
+  - _grid: List<List<int>>?
+  - _difficulty: String
+  - _paintValue: int?
+  - _startGrid(side: int): void
+  - _applyAt(localPosition: Offset, cellSize: double, {isDragStart, isTap}): void
+  - _save(l10n: AppLocalizations): Future<void>
+  --
+  + build(): Widget
+  - _buildSizePicker(l10n): Widget
+  - _buildEditor(l10n, isSaving: bool): Widget
+}
+
+class _EditorGridPainter <<CustomPainter>> {
+  + grid: List<List<int>>
+  + cellSize: double
+  --
+  + paint(canvas: Canvas, size: Size): void
+  + shouldRepaint(oldDelegate): bool
+}
+
+note right of BoardEditorScreen
+  Elige tamaño (8×8/12×12/16×16), luego
+  tocar/arrastrar pinta o borra celdas
+  (_minActiveCells=10, espeja la regla
+  del agregado CustomBoard del backend).
+  Publica vía boardsNotifierProvider.create().
+end note
+
+BoardEditorScreen *-- "0..1" _EditorGridPainter : uses
+
+' ─────────────────────────────────────────
+' WIDGETS — Tablero y flechas
+' ─────────────────────────────────────────
+
+class ArrowPainter <<CustomPainter>> {
+  + direction: Direction
+  + color: Color
+  + cellSize: double
+  + isActivatable: bool
+  --
+  + paint(canvas: Canvas, size: Size): void
+  - _paintZAxisMarker(canvas: Canvas, size: Size): void
+  + shouldRepaint(oldDelegate: ArrowPainter): bool
+}
+
+note right of ArrowPainter
+  Dibuja cuerpo + cabeza triangular de
+  una flecha. Direcciones Z (juego 3D)
+  se pintan como marcador ⊙/⊗ en vez
+  de flecha plana.
+end note
+
+class BoardPainter <<CustomPainter>> {
+  + board: Board
+  + activatableArrows: Set<String>
+  + flashMap: Map<String, FlashType>
+  + cellSize: double
+  + minX: int
+  + minY: int
+  + exitingArrows: List<ExitingArrowAnim>?
+  + highlightArrowId: String?
+  + highlightPulse: double
+  + gridOverlayOpacity: double
+  + smashingArrows: List<SmashingArrowAnim>?
+  - projection: BoardProjection
+  --
+  + paint(canvas: Canvas, size: Size): void
+  - _drawPrismFaces(canvas: Canvas): void
+  - _drawArrow(canvas, arrow, color, alpha, flash): void
+  - _drawHintRing(canvas: Canvas): void
+  - _drawExitLines(canvas: Canvas): void
+  - _drawSmashingArrows(canvas: Canvas): void
+  + shouldRepaint(oldDelegate: BoardPainter): bool
+}
+
+note right of BoardPainter
+  Renderer 2D/plano por defecto — pinta
+  celdas, flechas, animación de salida
+  (worm-exit), caras laterales del prisma
+  (tableros 3D con perspectiva, no ditredi)
+  y overlays de los 3 power-ups.
+end note
+
+class ExitingArrowAnim {
+  + cells: List<Position>
+  + direction: Direction
+  + color: String
+  + edgeDistance: int
+  + progress: double
+}
+
+class SmashingArrowAnim {
+  + cells: List<Position>
+  + direction: Direction
+  + color: String
+  + progress: double
+}
+
+class BoardProjection {
+  + {static} depthStep: double
+  + cellSize: double
+  + minX: int
+  + minY: int
+  + maxZ: int
+  --
+  + centerOf(pos: Position): Offset
+  + centerOfXYZf(gx: double, gy: double, z: double): Offset
+  + canvasSize(cols: int, rows: int): Size
+  + cellAt(local: Offset, z: int): Position?
+  + screenVector(dx: int, dy: int, dz: int): (double, double)
+}
+
+note right of BoardProjection
+  Fuente única de verdad para cell(x,y,z)
+  → píxel (proyección "cascada" en capas
+  diagonales). Compartida por BoardPainter
+  (dibujo) y GameScreen (hit-testing de
+  toques) — lo que se ve es lo que se toca.
+end note
+
+class Board3DEngineView <<StatefulWidget>> {
+  + board: Board
+  + activatableArrows: Set<String>
+  + onArrowTapped: Function(String)
+  + cols: int
+  + rows: int
+  + exitingArrows: List<ExitingArrowAnim>
+  + highlightArrowId: String?
+  + gridOverlayOpacity: double
+  + smashingArrows: List<SmashingArrowAnim>
+  - _controller: DiTreDiController
+  - _smoothPath(points: List<Vector3>): List<Vector3>
+  - _drawArrowModel(models, rawPoints, color, dir): void
+  - _drawHintGizmo(models, bodyPoints): void
+  - _buildScene(): List<Model3D>
+  - _handleTap(localPosition: Offset, canvasSize: Size): void
+  --
+  + build(context: BuildContext): Widget
+}
+
+note right of Board3DEngineView
+  Renderizado 3D matemático real (paquete
+  ditredi, C4) para el "Juego 3D (6
+  direcciones)": pirámides como cabezas de
+  flecha, líneas suavizadas en las esquinas,
+  hit-testing por proyección de la matriz
+  de cámara. Independiente del modo
+  "Tablero 3D" (perspectiva, BoardPainter).
+end note
+
+class BoardShapePreview <<StatelessWidget>> {
+  + grid: List<List<int>>
+  + size: double
+  + activeColor: Color
+  --
+  + build(context: BuildContext): Widget
+}
+
+class _ShapeDotsPainter <<CustomPainter>> {
+  + grid: List<List<int>>
+  + activeColor: Color
+  --
+  + paint(canvas: Canvas, size: Size): void
+  + shouldRepaint(oldDelegate): bool
+}
+
+note right of BoardShapePreview
+  Preview barato de una FORMA (puntos,
+  sin flechas ni generación) para listas
+  de tableros de la comunidad — envuelto
+  en RepaintBoundary.
+end note
+
+BoardShapePreview *-- "1" _ShapeDotsPainter : uses
+BoardPainter *-- "1" BoardProjection : projection
+BoardPainter ..> ExitingArrowAnim  : uses
+BoardPainter ..> SmashingArrowAnim : uses
+Board3DEngineView ..> ExitingArrowAnim  : uses
+Board3DEngineView ..> SmashingArrowAnim : uses
+
+' ─────────────────────────────────────────
+' WIDGETS — HUD y diálogos
+' ─────────────────────────────────────────
+
+class BottomTabBar <<StatelessWidget>> {
+  + active: AppTab
+  --
+  + build(context: BuildContext): Widget
+}
+
+enum AppTab {
+  home
+  levels
+}
+
+class ArrowShowcase <<StatefulWidget>> {
+  + onTap: VoidCallback
+  - _controller: AnimationController
+  --
+  + build(context: BuildContext): Widget
+}
+
+note right of ArrowShowcase
+  Backdrop decorativo del botón Play en
+  Home: flechas del juego (ArrowPainter)
+  flotando en un carril animado.
+end note
+
+class NoLivesDialog <<function>> {
+  + {static} showNoLivesDialog(context: BuildContext): Future<void>
+  + {static} formatLifeCountdown(d: Duration): String
+}
+
+note right of NoLivesDialog
+  No es una clase — función top-level.
+  Diálogo compartido: bloquea con 0 vidas
+  o muestra estado + compra (BuyLifeUseCase,
+  C2) si hay hueco en el pool. Usado por
+  Home, LevelSelectScreen, BoardsScreen y
+  GameScreen.
+end note
+
+class PowerUpBar <<StatelessWidget>> {
+  + coins: int
+  + pendingType: String?
+  + onSelect: Function(String)
+  - _showInfoSheet(context, info): void
+  --
+  + build(context: BuildContext): Widget
+}
+
+note right of PowerUpBar
+  Fila de 4 botones (Hint/Grid/Hammer/
+  Magnet); tocar uno abre una hoja con
+  descripción + costo; confirmar dispara
+  onSelect(type) — no gasta monedas ni
+  toca el tablero directamente.
+end note
+
+class PasswordRequirements <<StatelessWidget>> {
+  + password: String
+  + showRequirements: bool
+  --
+  + build(context: BuildContext): Widget
+}
+
+note right of PasswordRequirements
+  Checklist en vivo (8+ caracteres, 1
+  mayúscula, 1 carácter especial) usando
+  AuthValidator.validatePassword() —
+  mostrado en RegisterScreen.
+end note
+
+' ─────────────────────────────────────────
+' RELACIONES — App setup
+' ─────────────────────────────────────────
+
+MyApp --> AppRouter        : configures
+MyApp --> AppLocalizations : configures
+MyApp --> AuthInterceptor  : configures
+MyApp --> LoggingInterceptor : configures
+MyApp --> ErrorInterceptor : configures
+
+AuthInterceptor --> IAuthRepository : uses (C3)
+ErrorInterceptor ..> AppException   : <<throws>> (domain)
+
+' ─────────────────────────────────────────
+' RELACIONES — Screens → Notifiers (C3)
+' ─────────────────────────────────────────
+
+SplashScreen      --> AuthNotifier        : observes (C3)
+LoginScreen       --> AuthNotifier        : observes (C3)
+RegisterScreen    --> AuthNotifier        : observes (C3)
+HomeScreen        --> AuthNotifier        : observes (C3)
+HomeScreen        --> LevelSelectNotifier : observes (C3)
+HomeScreen        --> LivesNotifier       : observes (C3)
+ProfileScreen     --> AuthNotifier        : observes (C3)
+LevelSelectScreen --> LevelSelectNotifier : observes (C3)
+LevelSelectScreen --> LivesNotifier       : observes (C3)
+GameScreen        --> GameNotifier        : observes (C3)
+VictoryScreen     --> GameNotifier        : observes (C3)
+DefeatScreen      --> GameNotifier        : observes (C3)
+DefeatScreen      --> LivesNotifier       : observes (C3)
+LeaderboardScreen --> LeaderboardNotifier : observes (C3)
+SettingsScreen    --> SettingsNotifier    : observes (C3)
+BoardsScreen      --> BoardsNotifier      : observes (C3)
+BoardsScreen      --> LivesNotifier       : observes (C3)
+BoardEditorScreen --> BoardsNotifier      : observes (C3)
+
+LoginScreen    --> BiometricService : uses
+RegisterScreen --> PasswordRequirements : uses
+GameScreen     --> PowerUpBar   : uses
+GameScreen     --> BoardPainter : uses
+GameScreen     --> Board3DEngineView : uses (game3D)
+HomeScreen     --> ArrowShowcase   : uses
+HomeScreen     --> NoLivesDialog   : uses
+LevelSelectScreen --> NoLivesDialog : uses
+BoardsScreen      --> NoLivesDialog : uses
+BoardsScreen      --> BoardShapePreview : uses
+HomeScreen        --> BottomTabBar : uses
+LevelSelectScreen --> BottomTabBar : uses
+
+LoginScreen    --> ValidationErrorMapper : uses
+RegisterScreen --> ValidationErrorMapper : uses
+
+' ─────────────────────────────────────────
+' RELACIONES — Screens → Router
+' ─────────────────────────────────────────
+
+SplashScreen      --> AppRouter : uses
+HomeScreen        --> AppRouter : uses
+LevelSelectScreen --> AppRouter : uses
+BoardsScreen      --> AppRouter : uses
+VictoryScreen     --> AppRouter : uses
+DefeatScreen      --> AppRouter : uses
 
 ' ─────────────────────────────────────────
 ' FRAMEWORKS EXTERNOS
 ' (no se detallan — son dependencias externas)
 ' ─────────────────────────────────────────
 
-note as N2
-  Frameworks externos usados por C3:
+note as N3
+  Frameworks externos usados por C3/C4:
   ─────────────────────────────────
-  Dio               → ApiClient (HTTP)
-  sqflite           → GameProgressRepositoryImpl (local DB)
+  Dio                    → ApiClient (HTTP)
+  sqflite                → GameProgressRepositoryImpl (local DB, mobile)
+  shared_preferences     → fallback web de progreso + flags locales
   flutter_secure_storage → AuthRepositoryImpl (JWT storage)
-  just_audio        → AudioServiceImpl (sonido)
+  just_audio             → AudioServiceImpl (sonido)
+  local_auth             → BiometricService (Face ID/huella)
+  ditredi                → Board3DEngineView (motor 3D real)
   flutter_localizations  → AppLocalizations (i18n)
-  dart:async Timer  → GameNotifier (cronómetro)
+  go_router              → AppRouter (navegación declarativa)
+  dart:async Timer       → GameNotifier (cronómetro)
 end note
-
-' ─────────────────────────────────────────
-' RELACIONES
-' ─────────────────────────────────────────
-
-' App setup
-MyApp --> AppRouter       : configures
-MyApp --> AppLocalizations : configures
-
-' AOP — Interceptors componen el ApiClient (C3)
-AuthInterceptor   --> ApiClient : configures (C3)
-LoggingInterceptor --> ApiClient : configures (C3)
-ErrorInterceptor  --> ApiClient : configures (C3)
-AuthInterceptor   --> IAuthRepository : uses (C2)
-
-' Screens → Notifiers (C3)
-SplashScreen     --> AuthNotifier        : observes (C3)
-LoginScreen      --> AuthNotifier        : observes (C3)
-RegisterScreen   --> AuthNotifier        : observes (C3)
-LevelSelectScreen --> LevelSelectNotifier : observes (C3)
-LevelSelectScreen --> AuthNotifier       : observes (C3)
-GameScreen       --> GameNotifier        : observes (C3)
-VictoryScreen    --> GameNotifier        : observes (C3)
-DefeatScreen     --> GameNotifier        : observes (C3)
-LeaderboardScreen --> LeaderboardNotifier : observes (C3)
-SettingsScreen   --> SettingsNotifier    : observes (C3)
-
-' Screens → Router
-SplashScreen      --> AppRouter : uses
-LevelSelectScreen --> AppRouter : uses
-VictoryScreen     --> AppRouter : uses
-DefeatScreen      --> AppRouter : uses
 
 @enduml

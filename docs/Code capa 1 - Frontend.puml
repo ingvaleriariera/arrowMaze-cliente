@@ -22,6 +22,12 @@ skinparam abstract {
   HeaderBackgroundColor #F57C00
   HeaderFontColor #FFFFFF
 }
+skinparam enum {
+  BackgroundColor #F1F8E9
+  BorderColor #558B2F
+  HeaderBackgroundColor #689F38
+  HeaderFontColor #FFFFFF
+}
 skinparam note {
   BackgroundColor #F3E5F5
   BorderColor #7B1FA2
@@ -32,12 +38,12 @@ skinparam note {
 ' ─────────────────────────────────────────
 
 class Board {
-  - shape: BoardShape
-  - arrows: Map<String, Arrow>
-  - grid: Map<String, String>
-  - graph: BoardGraph
+  + shape: BoardShape
+  + arrows: Map<String, Arrow>
+  + grid: Map<String, String>
+  + graph: BoardGraph
   --
-  - Board(shape: BoardShape, arrows: Map<String, Arrow>)
+  + Board(shape: BoardShape, arrows: Map<String, Arrow>, grid: Map<String, String>, graph: BoardGraph)
   + getArrowAt(position: Position): Arrow?
   + removeArrow(arrowId: String): void
   + forceRemoveArrow(arrowId: String): void
@@ -45,8 +51,6 @@ class Board {
   + isActivatable(arrowId: String): bool
   + getHint(): String?
   + isEmpty(): bool
-  + getArrows(): Map<String, Arrow>
-  + getShape(): BoardShape
 }
 
 note right of Board
@@ -58,92 +62,150 @@ note right of Board
 end note
 
 class GameSession {
-  - board: Board
-  - levelId: String
-  - score: int
-  - moves: int
-  - maxMoves: int
-  - timeRemaining: int?
-  - state: IGameState
+  + board: Board
+  + levelId: String
+  + maxMoves: int
+  + maxScore: int
+  + moves: int
+  + failedMoves: int
+  + score: int
+  + timeRemaining: int?
+  - _state: IGameState
+  - _observers: List<IGameObserver>
   --
-  - GameSession(board: Board, levelId: String, maxMoves: int, timeLimit: TimeLimit?)
+  + GameSession(board: Board, levelId: String, maxMoves: int, timeRemaining: int?)
+  + get state(): IGameState
+  + addObserver(observer: IGameObserver): void
+  + removeObserver(observer: IGameObserver): void
   + executeMove(arrowId: String): MoveResult
-  + applyPowerUp(powerUp: PowerUp): PowerUpResult
+  + deductMove(): void
   + pause(): void
   + resume(): void
   + tick(): void
-  + getBoard(): Board
-  + getScore(): int
-  + getMoves(): int
-  + getState(): IGameState
+  + applyPowerUp(powerUp: PowerUp): PowerUpResult
+  + calculateFinalScore(): void
   + isOver(): bool
+  + isPlaying(): bool
   + isTimedLevel(): bool
 }
 
 note right of GameSession
-  Patrón State (Comportamiento).
-  executeMove() delega en state.handle().
-  pause() → transición a PausedState.
-  resume() → transición a PlayingState.
+  Patrón State (Comportamiento) + Observer (Comportamiento).
+  executeMove() delega en _state.handle().
+  pause()/resume() → transición Playing ↔ Paused.
   tick() → descuenta 1s; si llega a 0
   y es nivel cronometrado → DefeatState.
+  maxScore se calcula del total de
+  segmentos de todas las flechas.
+  calculateFinalScore() pondera el score
+  final por precisión (moves - failedMoves)/moves.
+  GameSession es el Subject: notifica a
+  cada IGameObserver en cada jugada,
+  cambio de score y fin de partida.
 end note
 
 class Level {
-  - id: String
-  - difficulty: String
-  - boardLayout: String
-  - moveLimit: int
-  - timeLimit: TimeLimit?
+  + id: String
+  + difficulty: String
+  + boardLayout: String
+  + moveLimit: int
+  + timeLimit: TimeLimit
   --
-  - Level(id: String, difficulty: String, boardLayout: String, moveLimit: int, timeLimit: TimeLimit?)
-  + getId(): String
+  + Level(id: String, difficulty: String, boardLayout: String, moveLimit: int, timeLimit: TimeLimit)
   + getBoardShape(): BoardShape
-  + getMoveLimit(): int
-  + getDifficulty(): String
-  + getBoardLayout(): String
-  + getTimeLimit(): TimeLimit?
   + isTimed(): bool
 }
 
 class Arrow {
-  - id: String
-  - segments: List<ArrowSegment>
-  - color: ArrowColor
+  + id: String
+  + segments: List<ArrowSegment>
+  + color: ArrowColor
   --
-  - Arrow(id: String, segments: List<ArrowSegment>, color: ArrowColor)
-  + getId(): String
+  + Arrow(id: String, segments: List<ArrowSegment>, color: ArrowColor)
   + getHead(): ArrowSegment
   + getDirection(): Direction
-  + getSegments(): List<ArrowSegment>
-  + getColor(): ArrowColor
 }
 
 class MoveResult {
-  - success: bool
-  - arrowId: String
-  - exitedSegments: List<ArrowSegment>
+  + success: bool
+  + arrowId: String
+  + exitedSegments: List<ArrowSegment>
   --
-  + {static} success(arrowId: String, segments: List<ArrowSegment>): MoveResult
-  + {static} failure(arrowId: String): MoveResult
+  + {static} exitSuccess(arrowId: String, segments: List<ArrowSegment>): MoveResult
+  + {static} exitFailure(arrowId: String): MoveResult
   + isSuccess(): bool
-  + getArrowId(): String
-  + getExitedSegments(): List<ArrowSegment>
 }
 
 class GameProgress {
-  - userId: String
-  - completedLevels: List<String>
-  - bestScores: Map<String, int>
-  - coins: int
+  + userId: String
+  + completedLevels: List<String>
+  + bestScores: Map<String, int>
+  + coins: int
+  + avatarEmoji: String
+  + {static} replayCoinFactor: double = 0.25
   --
+  + GameProgress(userId: String, coins: int, avatarEmoji: String)
   + isCompleted(levelId: String): bool
-  + getBestScore(levelId: String): int
+  + getBestScore(levelId: String): int?
   + recordCompletion(levelId: String, score: int): void
-  + getCoins(): int
   + addCoins(amount: int): void
   + spendCoins(amount: int): bool
+  + setAvatar(emoji: String): void
+  + get totalScore(): int
 }
+
+note right of GameProgress
+  recordCompletion(): primera vez → coins
+  += score completo; en un replay → coins
+  += score * replayCoinFactor (25%).
+  avatarEmoji es local-only (no viaja
+  al backend, fuera de ProgressMapper).
+end note
+
+class PlayerLives {
+  + {static} maxLives: int = 5
+  + {static} regenInterval: Duration = 20min
+  + lives: int
+  + nextRegenAt: DateTime?
+  --
+  + PlayerLives(lives: int, nextRegenAt: DateTime?)
+  + {static} full(): PlayerLives
+  + get canPlay(): bool
+  + get isFull(): bool
+  + regenerated(now: DateTime): PlayerLives
+  + afterLosingLife(now: DateTime): PlayerLives
+  + afterGainingLife(): PlayerLives
+  + timeUntilNextLife(now: DateTime): Duration?
+}
+
+note right of PlayerLives
+  Entidad inmutable — toda mutación
+  retorna una instancia nueva. El reloj
+  ("now") se inyecta por parámetro en
+  vez de leerse internamente → 100%
+  testeable sin mockear DateTime.now().
+  regenerated() es acumulativo: 1h fuera
+  con intervalo de 20min = +3 vidas.
+end note
+
+' ─────────────────────────────────────────
+' PATRÓN OBSERVER (Comportamiento)
+' ─────────────────────────────────────────
+
+interface IGameObserver {
+  + onPlayerMoved(result: MoveResult): void
+  + onScoreUpdated(newScore: int): void
+  + onLevelCompleted(success: bool, finalScore: int): void
+}
+
+note bottom of IGameObserver
+  Patrón Observer (Comportamiento).
+  Port puro de dominio (sin imports de
+  Flutter). GameSession es el Subject;
+  los implementadores viven en Capa 3
+  (p. ej. GameNotifier) y reaccionan a
+  jugadas, cambios de score y fin de partida.
+end note
 
 ' ─────────────────────────────────────────
 ' PATRÓN STATE (Comportamiento)
@@ -171,6 +233,16 @@ class PlayingState {
   + getLabel(): String
 }
 
+note bottom of PlayingState
+  handle() valida en orden:
+  1. board.isActivatable(arrowId)
+  2. board.graph.hasVoidReentry(...) —
+     regla de re-entrada por hueco (ver
+     nota de BoardGraph).
+  Si pasa ambas → board.removeArrow()
+  y retorna MoveResult.exitSuccess().
+end note
+
 class PausedState {
   --
   + handle(arrowId: String, board: Board): MoveResult
@@ -194,105 +266,128 @@ class VictoryState {
 }
 
 class DefeatState {
+  + reason: String
   --
+  + DefeatState(reason: String)
   + handle(arrowId: String, board: Board): MoveResult
   + isPlaying(): bool
   + isOver(): bool
   + getLabel(): String
 }
 
+note bottom of DefeatState
+  reason ∈ {DEADLOCK, OUT_OF_MOVES, TIME_UP}.
+  getLabel() → "DEFEAT ($reason)".
+end note
+
 ' ─────────────────────────────────────────
-' POSICIÓN, DIRECCIÓN Y SEGMENTO
+' POSICIÓN, DIRECCIÓN Y SEGMENTO (soporte 3D)
 ' ─────────────────────────────────────────
 
 class Position {
-  - x: int
-  - y: int
+  + x: int
+  + y: int
+  + z: int
   --
-  - Position(x: int, y: int)
-  + getX(): int
-  + getY(): int
+  + Position(x: int, y: int, z: int = 0)
   + translate(direction: Direction): Position
-  + equals(other: Position): bool
   + toKey(): String
+  + {static} fromKey(key: String): Position
+  + equals(other: Position): bool
 }
 
+note bottom of Position
+  z por defecto 0 → todo el pipeline 2D
+  sigue funcionando sin tocarlo.
+  toKey() usa clave corta "x,y" cuando
+  z=0 (formato canónico heredado) y
+  "x,y,z" en capas superiores.
+end note
+
 class Direction {
-  - dx: int
-  - dy: int
+  + dx: int
+  + dy: int
+  + dz: int
   --
-  - Direction(dx: int, dy: int)
-  + {static} up(): Direction
-  + {static} down(): Direction
-  + {static} left(): Direction
-  + {static} right(): Direction
-  + getDx(): int
-  + getDy(): int
+  - Direction(dx: int, dy: int, dz: int = 0)
+  + {static} up: Direction
+  + {static} down: Direction
+  + {static} left: Direction
+  + {static} right: Direction
+  + {static} forward: Direction
+  + {static} back: Direction
+  + {static} planar: List<Direction>
+  + {static} all: List<Direction>
   + opposite(): Direction
   + equals(other: Direction): bool
 }
 
 note bottom of Direction
   Patrón Factory Method (Creacional).
-  Constructor privado + factories estáticos:
-  up(), down(), left(), right().
-  Solo se crean instancias válidas.
-  Mismo patrón en ArrowColor.
+  Constructor privado + constantes estáticas:
+  up/down/left/right (planar, dz=0) y
+  forward/back (nuevas, dz=±1, para el
+  modo 3D — tableros extruidos con
+  BoardShape.extrude). Mismo patrón en
+  ArrowColor y TimeLimit.
 end note
 
 class ArrowSegment {
-  - position: Position
-  - directionToNext: Direction
+  + position: Position
+  + directionToNext: Direction
   --
-  - ArrowSegment(position: Position, directionToNext: Direction)
-  + getPosition(): Position
-  + getDirectionToNext(): Direction
+  + ArrowSegment(position: Position, directionToNext: Direction)
 }
 
 class BoardShape {
-  - validCells: Set<String>
+  + validCells: Set<String>
   --
-  - BoardShape(validCells: Set<String>)
-  + {static} fromJson(json: String): BoardShape
+  + BoardShape(validCells: Set<String>)
+  + {static} fromJson(jsonString: String): BoardShape
+  + {static} extrude(shape2D: BoardShape, depth: int): BoardShape
   + contains(position: Position): bool
   + isExitFrom(position: Position, direction: Direction): bool
+  + distanceToExit(from: Position, direction: Direction): int
   + getCells(): List<Position>
+  + maxZ(): int
   + size(): int
 }
 
 note bottom of BoardShape
   validCells: Set<String> — colección de
   elementos únicos con búsqueda O(1).
-  Cada elemento es la clave "x,y".
-  Parsea el boardLayout JSON del backend.
-  Define la forma: corazón, cruz, cuadrado…
+  Parsea el boardLayout JSON 2D del backend.
+  extrude() es el único lugar donde nace
+  un tablero 3D: convierte la silueta plana
+  en un prisma de "depth" capas idénticas;
+  depth=1 devuelve el shape sin cambios.
+  El backend nunca sabe que existen 3D.
 end note
 
 class TimeLimit {
-  - seconds: int
+  + seconds: int
   --
   - TimeLimit(seconds: int)
-  + {static} none(): TimeLimit
+  + {static} none: TimeLimit
   + {static} of(seconds: int): TimeLimit
-  + getValue(): int
   + hasLimit(): bool
-  + equals(other: TimeLimit): bool
+  + getValue(): int
 }
 
 note right of TimeLimit
-  Niveles HARD tienen cronómetro.
-  TimeLimit.none() representa un
+  Niveles HARD tienen cronómetro
+  (ver PerArrowTimeLimitPolicy).
+  TimeLimit.none representa un
   nivel sin límite de tiempo.
   GameSession.tick() lo usa para
   saber si debe terminar la partida.
 end note
 
 class ArrowColor {
-  - value: String
+  + value: String
   --
   - ArrowColor(value: String)
   + {static} fromHex(hex: String): ArrowColor
-  + getValue(): String
   + equals(other: ArrowColor): bool
 }
 
@@ -301,22 +396,24 @@ class ArrowColor {
 ' ─────────────────────────────────────────
 
 class BoardGraph {
-  - nodes: Map<String, ArrowNode>
+  + nodes: Map<String, ArrowNode>
   --
-  - BoardGraph()
-  + build(arrows: Map<String, Arrow>, shape: BoardShape): void
+  + BoardGraph(nodes: Map<String, ArrowNode>)
+  + {static} empty(): BoardGraph
+  + build(arrows: Map<String, Arrow>, grid: Map<String, String>, shape: BoardShape): void
   + removeArrow(arrowId: String): void
   + getActivatable(): List<String>
   + isActivatable(arrowId: String): bool
+  + hasVoidReentry(arrowId: String, arrows: Map<String, Arrow>, grid: Map<String, String>, shape: BoardShape): bool
   + size(): int
 }
 
 class ArrowNode {
-  - arrowId: String
-  - blockedBy: Set<String>
+  + arrowId: String
+  + blockedBy: Set<String>
+  + blockedByVoidReentry: bool
   --
-  - ArrowNode(arrowId: String, blockedBy: Set<String>)
-  + getArrowId(): String
+  + ArrowNode(arrowId: String, blockedBy: Set<String>, blockedByVoidReentry: bool = false)
   + isActivatable(): bool
   + removeBlocker(blockerId: String): void
   + getBlockers(): Set<String>
@@ -329,6 +426,17 @@ note left of BoardGraph
   Activable = blockedBy vacío.
   Al salir una flecha: se elimina su
   nodo y se desbloquean dependientes.
+  ─────────────────────────────
+  Regla de void re-entry (IMPORTANTE):
+  el rayo de salida atraviesa huecos
+  interiores (no son salida); si del otro
+  lado del hueco hay otra flecha, ésta
+  bloquea (void re-entry). Esta regla vive
+  IDÉNTICA en tres lugares: build() de
+  este grafo, hasVoidReentry() (chequeo
+  al tocar), y BoardBuilder (generación).
+  Los tres deben permanecer alineados —
+  fue el bug del nivel 15 (anillo).
 end note
 
 ' ─────────────────────────────────────────
@@ -336,21 +444,62 @@ end note
 ' ─────────────────────────────────────────
 
 class BoardBuilder <<Builder>> {
-  - shape: BoardShape
-  - arrows: List<Arrow>
+  - _shape: BoardShape
+  - _difficultyStr: String
+  - _random: Random
+  - _arrows: Map<String, Arrow>
+  - _calculatedMaxMoves: int?
   --
-  - BoardBuilder()
-  + {static} create(): BoardBuilder
+  + BoardBuilder(seed: int?)
+  + {static} create(seed: int?): BoardBuilder
+  + {static} fromArrows(shape: BoardShape, arrows: List<Arrow>): Board
   + setShape(shape: BoardShape): BoardBuilder
+  + setDifficulty(difficultyStr: String): BoardBuilder
+  + getCalculatedMaxMoves(): int?
+  + {static} calculateMaxMoves(totalArrows: int, difficultyStr: String): int
   + addArrow(arrow: Arrow): BoardBuilder
   + build(): Board
 }
 
 note right of BoardBuilder
   Patrón Builder (Creacional).
-  Construye un Board paso a paso
-  desde el boardLayout JSON del backend.
-  Usado por LoadLevelUseCase (Capa 2).
+  build() genera flechas proceduralmente
+  (backward construction) hasta encontrar
+  un puzzle válido y resoluble, con hasta
+  80 intentos + reparación del mejor
+  candidato si ninguno cierra limpio.
+  fromArrows() construye directo desde
+  un layout ya conocido (p. ej. IBoardCache),
+  sin la búsqueda aleatoria.
+  Usado por generateBoard() (Capa 2).
+end note
+
+class BoardGenerationRequest {
+  + seed: int
+  + boardLayoutJson: String
+  + difficulty: String
+  + depth: int
+  --
+  + BoardGenerationRequest(seed: int, boardLayoutJson: String, difficulty: String, depth: int = 1)
+}
+
+class BoardGenerationResult {
+  + board: Board
+  + maxMoves: int
+  --
+  + BoardGenerationResult(board: Board, maxMoves: int)
+}
+
+note bottom of BoardGenerationResult
+  generateBoard(request): BoardGenerationResult
+  es una función top-level (no un método
+  de clase) requerida por compute()/
+  Isolate.run — corre la generación de
+  BoardBuilder en un isolate/hilo aparte
+  para no congelar la UI mientras genera.
+  BoardGenerationRequest es puro dato
+  (sin closures) para poder cruzar el
+  límite del isolate.
 end note
 
 ' ─────────────────────────────────────────
@@ -359,9 +508,9 @@ end note
 
 abstract class PowerUp <<Template Method>> {
   --
-  + final use(board: Board): PowerUpResult
-  # canApply(board: Board): bool
-  # {abstract} apply(board: Board): void
+  + use(board: Board): PowerUpResult
+  + canApply(board: Board): bool
+  + {abstract} apply(board: Board): void
   + {abstract} getCost(): int
   + {abstract} getType(): String
 }
@@ -369,70 +518,112 @@ abstract class PowerUp <<Template Method>> {
 note right of PowerUp
   Patrón Template Method (Comportamiento).
   use() es el método plantilla:
-    1. canApply() — valida (hook, override opcional)
+    1. canApply() — valida (hook, default true)
     2. apply()    — aplica el efecto (hook abstracto)
-  Agregar un nuevo power-up = implementar
-  apply() y getCost() únicamente.
-  No hay que tocar la base.
+  Hint/Hammer/Magnet sobreescriben use()
+  para retornar mensajes/afectados propios;
+  Grid usa el use() base tal cual.
+  Agregar un power-up nuevo no toca esta clase.
 end note
 
 class HintPowerUp {
   --
-  # canApply(board: Board): bool
-  # apply(board: Board): void
+  + canApply(board: Board): bool
+  + apply(board: Board): void
+  + use(board: Board): PowerUpResult
   + getCost(): int
   + getType(): String
 }
 
 note bottom of HintPowerUp
-  apply() → resalta board.getHint()
-  (primer arrowId activable del grafo).
-  canApply() → false si no hay activables.
+  canApply() → board.getHint() != null.
+  use() → PowerUpResult con el arrowId
+  del hint como affectedArrowIds. Costo 100.
 end note
 
 class HammerPowerUp {
-  - targetArrowId: String
+  + targetArrowId: String
   --
-  # canApply(board: Board): bool
-  # apply(board: Board): void
+  + HammerPowerUp(targetArrowId: String)
+  + canApply(board: Board): bool
+  + apply(board: Board): void
+  + use(board: Board): PowerUpResult
   + getCost(): int
   + getType(): String
 }
 
 note bottom of HammerPowerUp
-  apply() → llama board.forceRemoveArrow()
+  apply() → board.forceRemoveArrow().
   Elimina la flecha sin importar si
-  está bloqueada. Actualiza el grafo.
+  está bloqueada. Costo 100.
 end note
 
 class MagnetPowerUp {
-  - direction: Direction
+  + {static} maxArrowsRemoved: int = 5
   --
-  # canApply(board: Board): bool
-  # apply(board: Board): void
+  + canApply(board: Board): bool
+  + apply(board: Board): void
+  + use(board: Board): PowerUpResult
   + getCost(): int
   + getType(): String
 }
 
 note bottom of MagnetPowerUp
-  apply() → activa todas las flechas
-  que apuntan en la dirección indicada
-  y tienen el camino libre.
+  apply() → activa hasta 5 flechas
+  actualmente activables (board.getActivatableArrows()).
+  Costo 500.
+end note
+
+class GridPowerUp {
+  --
+  + apply(board: Board): void
+  + getCost(): int
+  + getType(): String
+}
+
+note bottom of GridPowerUp
+  apply() es no-op: revelar la dirección
+  de salida de cada flecha es puramente
+  de presentación (Capa 4), no muta el
+  dominio. Costo 50.
 end note
 
 class PowerUpResult {
-  - success: bool
-  - affectedArrowId: String?
-  - message: String?
+  + success: bool
+  + message: String
+  + affectedArrowIds: List<String>
   --
-  + {static} success(arrowId: String?): PowerUpResult
-  + {static} failure(message: String): PowerUpResult
-  + isSuccess(): bool
-  + getAffectedArrowId(): String?
+  + PowerUpResult(success: bool, message: String, affectedArrowIds: List<String> = [])
+  + {static} applySuccess(message: String, affectedArrowIds: List<String>): PowerUpResult
+  + {static} applyFailure(message: String): PowerUpResult
 }
 
 ' ─────────────────────────────────────────
-' VALIDADOR
+' PATRÓN STRATEGY — Cronómetro
+' ─────────────────────────────────────────
+
+interface ITimeLimitPolicy {
+  + forLevel(difficulty: String, totalArrows: int): TimeLimit
+}
+
+class PerArrowTimeLimitPolicy <<Strategy>> {
+  + {static} secondsPerArrow: int = 2
+  + {static} minimumSeconds: int = 60
+  --
+  + forLevel(difficulty: String, totalArrows: int): TimeLimit
+}
+
+note right of PerArrowTimeLimitPolicy
+  Patrón Strategy (Comportamiento).
+  Solo niveles HARD son cronometrados:
+  2s por flecha generada, piso de 60s.
+  Inyectada por puerto en LoadLevelUseCase
+  (Capa 2) — otra política de tiempo
+  entra sin tocar el caso de uso (OCP).
+end note
+
+' ─────────────────────────────────────────
+' VALIDADORES
 ' ─────────────────────────────────────────
 
 class LevelValidator {
@@ -441,6 +632,84 @@ class LevelValidator {
   + isSolvable(board: Board): bool
 }
 
+note bottom of LevelValidator
+  isSolvable() usa el algoritmo de Kahn
+  (orden topológico) sobre board.graph
+  para detectar ciclos de bloqueo.
+end note
+
+class AuthValidator <<Utility>> {
+  --
+  + {static} validateEmail(email: String): ValidationResult
+  + {static} validateUsername(username: String): ValidationResult
+  + {static} validateEmailOrUsername(input: String): ValidationResult
+  + {static} validatePassword(password: String): PasswordValidationResult
+  + {static} isPasswordValid(result: PasswordValidationResult): bool
+}
+
+class ValidationResult {
+  + isValid: bool
+  + message: String?
+  + errorType: ValidationErrorType?
+  --
+  + ValidationResult(isValid: bool, message: String?, errorType: ValidationErrorType?)
+}
+
+class PasswordValidationResult {
+  + hasMinLength: bool
+  + hasUpperCase: bool
+  + hasSpecialChar: bool
+  --
+  + get isValid(): bool
+  + getErrorMessage(): String
+  + getErrorMessageKeys(): List<String>
+}
+
+enum ValidationErrorType {
+  emailRequired
+  emailMustHaveAt
+  emailTooShort
+  emailInvalidChars
+  emailInvalidFormat
+  usernameRequired
+  usernameTooShort
+  usernameInvalidChars
+  usernameInvalidFormat
+  invalidEmailOrUsername
+}
+
+' ─────────────────────────────────────────
+' EXCEPCIONES DE DOMINIO
+' ─────────────────────────────────────────
+
+class AppException {
+  + message: String
+  --
+  + AppException(message: String)
+}
+
+class BadRequestException {
+}
+
+class UnauthorizedException {
+}
+
+class NotFoundException {
+}
+
+class ServerException {
+}
+
+class NetworkException {
+}
+
+note bottom of NetworkException
+  Jerarquía mapeada 1:1 a códigos HTTP
+  por ErrorInterceptor (Capa 4) y usada
+  por los notifiers (Capa 3) para mostrar
+  mensajes localizados según el tipo.
+end note
+
 ' ─────────────────────────────────────────
 ' PORTS — definidos en Capa 1,
 ' implementados en Capa 3,
@@ -448,16 +717,41 @@ class LevelValidator {
 ' ─────────────────────────────────────────
 
 interface ILevelRepository {
-  + getLevel(levelId: String): Level
-  + getLevels(): List<Level>
-  + getLevelsByDifficulty(difficulty: String): List<Level>
+  + getLevel(levelId: String): Future<Level>
+  + getLevels(): Future<List<Level>>
+  + getLevelsByDifficulty(difficulty: String): Future<List<Level>>
 }
 
 interface IGameProgressRepository {
-  + save(progress: GameProgress): void
-  + get(userId: String): GameProgress?
-  + sync(userId: String): GameProgress
+  + save(progress: GameProgress): Future<void>
+  + get(userId: String): Future<GameProgress?>
+  + sync(userId: String): Future<GameProgress>
 }
+
+interface ILivesRepository {
+  + load(userId: String): Future<PlayerLives>
+  + save(userId: String, lives: PlayerLives): Future<void>
+}
+
+note bottom of ILivesRepository
+  Almacenamiento local por diseño
+  (como avatarEmoji): las vidas son un
+  mecanismo de ritmo, no progreso que
+  valga la pena sincronizar con el backend.
+end note
+
+interface IBoardCache {
+  + has(levelId: String): bool
+  + put(levelId: String, arrows: List<Arrow>): void
+  + get(levelId: String): List<Arrow>?
+}
+
+note bottom of IBoardCache
+  Cachea el layout de flechas generado
+  por nivel, para que la búsqueda costosa
+  de BoardBuilder corra una sola vez por
+  nivel en la vida de la app.
+end note
 
 ' ─────────────────────────────────────────
 ' RELACIONES
@@ -465,7 +759,8 @@ interface IGameProgressRepository {
 
 ' GameSession
 GameSession *-- "1" Board       : board
-GameSession *-- "1" IGameState  : state
+GameSession *-- "1" IGameState  : _state
+GameSession o-- "0..*" IGameObserver : _observers
 GameSession ..> MoveResult      : <<returns>>
 GameSession ..> PowerUpResult   : <<returns>>
 GameSession --> PowerUp         : uses
@@ -500,10 +795,9 @@ BoardGraph *-- "0..*" ArrowNode : nodes
 HintPowerUp   --|> PowerUp
 HammerPowerUp --|> PowerUp
 MagnetPowerUp --|> PowerUp
+GridPowerUp   --|> PowerUp
 PowerUp       ..> Board          : uses
 PowerUp       ..> PowerUpResult  : <<returns>>
-HammerPowerUp *-- "1" Direction  : targetDirection
-MagnetPowerUp *-- "1" Direction  : direction
 
 ' Level
 Level ..> BoardShape : <<produces>>
@@ -514,11 +808,32 @@ BoardBuilder ..> Board      : <<creates>>
 BoardBuilder --> BoardShape : uses
 BoardBuilder --> Arrow      : uses
 
-' Ports
-IGameProgressRepository ..> GameProgress : <<manages>>
+' Generación en isolate
+BoardGenerationRequest ..> BoardGenerationResult : <<generateBoard()>>
+BoardGenerationResult  *-- "1" Board : board
+BoardGenerationRequest --> BoardBuilder : uses
 
-' LevelValidator
+' Strategy — cronómetro
+PerArrowTimeLimitPolicy ..|> ITimeLimitPolicy
+PerArrowTimeLimitPolicy ..> TimeLimit : <<returns>>
+
+' Validadores
 LevelValidator --> Level : validates
 LevelValidator --> Board : validates
+AuthValidator  ..> ValidationResult         : <<returns>>
+AuthValidator  ..> PasswordValidationResult : <<returns>>
+ValidationResult *-- "0..1" ValidationErrorType : errorType
+
+' Excepciones
+BadRequestException  --|> AppException
+UnauthorizedException --|> AppException
+NotFoundException    --|> AppException
+ServerException       --|> AppException
+NetworkException      --|> AppException
+
+' Ports
+IGameProgressRepository ..> GameProgress : <<manages>>
+ILivesRepository        ..> PlayerLives  : <<manages>>
+IBoardCache             ..> Arrow        : <<caches>>
 
 @enduml
