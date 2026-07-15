@@ -13,9 +13,9 @@ import 'package:flutter/material.dart';
 /// still receives coordinates in flat board space.
 class Board3DViewport extends StatefulWidget {
   final bool enabled;
-  final Widget child;
+  final Widget Function(BuildContext context, double rotX, double rotY) builder;
 
-  const Board3DViewport({required this.enabled, required this.child, super.key});
+  const Board3DViewport({required this.enabled, required this.builder, super.key});
 
   @override
   State<Board3DViewport> createState() => _Board3DViewportState();
@@ -86,7 +86,7 @@ class _Board3DViewportState extends State<Board3DViewport> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled) return widget.child;
+    if (!widget.enabled) return widget.builder(context, _defaultTilt, 0.0);
 
     return GestureDetector(
       // Trackball-style handling of a physical object: horizontal drag
@@ -108,16 +108,7 @@ class _Board3DViewportState extends State<Board3DViewport> {
         });
       },
       onLongPress: _resetPose,
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.identity()
-          // Perspective term: gives depth to the rotations below. Small
-          // values keep the far edge readable; 0 would be isometric.
-          ..setEntry(3, 2, 0.0012)
-          ..rotateX(_rotationX)
-          ..rotateY(_rotationY),
-        child: widget.child,
-      ),
+      child: widget.builder(context, _rotationX, _rotationY),
     );
   }
 }

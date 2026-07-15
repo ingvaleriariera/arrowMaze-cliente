@@ -20,6 +20,7 @@ import 'package:arrow_maze_cliente_copy/domain/value_objects/position.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/config/app_localizations.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_3d_viewport.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_painter.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/widgets/true_3d_board_painter.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/board_projection.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/widgets/power_up_bar.dart';
 
@@ -609,75 +610,90 @@ class _GameScreenState extends ConsumerState<GameScreen>
                       transformationController: _transformationController,
                       child: Board3DViewport(
                         enabled: board3D,
-                        child: Center(
-                        child: SizedBox(
-                          width: gridWidth,
-                          height: gridHeight,
-                          child: GestureDetector(
-                            onTapDown: (details) {
-                              // Hit-test layers from the top of the
-                              // cascade down: the first OCCUPIED cell
-                              // wins, so upper floors are tapped where
-                              // they still have arrows and lower floors
-                              // become reachable through the gaps as the
-                              // stack clears. Flat boards reduce to the
-                              // old single-lookup behavior.
-                              String? arrowId;
-                              for (int z = maxZ; z >= 0 && arrowId == null; z--) {
-                                final cell = projection.cellAt(
-                                    details.localPosition, z);
-                                if (cell == null) continue;
-                                arrowId = board.grid[cell.toKey()];
-                              }
-                              debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
-                              if (arrowId == null) return;
-                              debugPrint('🎯 Arrow tapped: $arrowId');
-
-                              // Hammer targeting mode: any arrow can be the
-                              // target, blocked or not — that's the whole
-                              // point of the hammer, unlike a normal tap.
-                              if (_pendingPowerUp == 'HAMMER') {
-                                final arrow = board.arrows[arrowId];
-                                setState(() => _pendingPowerUp = null);
-                                if (arrow == null) return;
-                                gameNotifier
-                                    .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
-                                    .then((result) {
-                                  _handlePowerUpResult(result);
-                                  if (result != null && result.success) {
-                                    _startSmashAnimation(arrow);
+                        builder: (context, rotX, rotY) {
+                          return Center(
+                            child: SizedBox(
+                              width: gridWidth,
+                              height: gridHeight,
+                              child: GestureDetector(
+                                onTapDown: (details) {
+                                  // In true 3D mode, the perspective makes hit testing tricky
+                                  // since the canvas coordinates aren't flat anymore. 
+                                  // For now, we fallback to the isometric projection hit-test 
+                                  // logic since the overall "bounding box" of the grid on the screen 
+                                  // is roughly the same, but it will be slightly off depending on rotation.
+                                  String? arrowId;
+                                  for (int z = maxZ; z >= 0 && arrowId == null; z--) {
+                                    final cell = projection.cellAt(
+                                        details.localPosition, z);
+                                    if (cell == null) continue;
+                                    arrowId = board.grid[cell.toKey()];
                                   }
-                                });
-                                return;
-                              }
+                                  debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
+                                  if (arrowId == null) return;
+                                  debugPrint('🎯 Arrow tapped: $arrowId');
 
-                              if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
-                                final arrow = board.arrows[arrowId];
-                                if (arrow != null) {
-                                  _startExitAnimation(arrow, shape);
-                                }
-                              }
-                              gameNotifier.activateArrow(arrowId);
-                            },
-                            child: CustomPaint(
-                              painter: BoardPainter(
-                                board: board,
-                                activatableArrows: activatableSet,
-                                cellSize: cellSize,
-                                minX: minX,
-                                minY: minY,
-                                flashMap: gameState.flashMap,
-                                exitingArrows: _buildExitingAnimList(),
-                                highlightArrowId: _hintArrowId,
-                                highlightPulse: _hintController?.value ?? 0,
-                                gridOverlayOpacity: _gridOverlayOpacity,
-                                smashingArrows: _buildSmashingAnimList(),
+                                  if (_pendingPowerUp == 'HAMMER') {
+                                    final arrow = board.arrows[arrowId];
+                                    setState(() => _pendingPowerUp = null);
+                                    if (arrow == null) return;
+                                    gameNotifier
+                                        .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
+                                        .then((result) {
+                                      _handlePowerUpResult(result);
+                                      if (result != null && result.success) {
+                                        _startSmashAnimation(arrow);
+                                      }
+                                    });
+                                    return;
+                                  }
+
+                                  if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
+                                    final arrow = board.arrows[arrowId];
+                                    if (arrow != null) {
+                                      _startExitAnimation(arrow, shape);
+                                    }
+                                  }
+                                  gameNotifier.activateArrow(arrowId);
+                                },
+                                child: CustomPaint(
+                                  painter: board3D && maxZ > 0
+                                      ? True3DBoardPainter(
+                                          board: board,
+                                          activatableArrows: activatableSet,
+                                          cellSize: cellSize,
+                                          minX: minX,
+                                          minY: minY,
+                                          cols: cols,
+                                          rows: rows,
+                                          flashMap: gameState.flashMap,
+                                          rotationX: rotX,
+                                          rotationY: rotY,
+                                          exitingArrows: _buildExitingAnimList(),
+                                          highlightArrowId: _hintArrowId,
+                                          highlightPulse: _hintController?.value ?? 0,
+                                          gridOverlayOpacity: _gridOverlayOpacity,
+                                          smashingArrows: _buildSmashingAnimList(),
+                                        )
+                                      : BoardPainter(
+                                          board: board,
+                                          activatableArrows: activatableSet,
+                                          cellSize: cellSize,
+                                          minX: minX,
+                                          minY: minY,
+                                          flashMap: gameState.flashMap,
+                                          exitingArrows: _buildExitingAnimList(),
+                                          highlightArrowId: _hintArrowId,
+                                          highlightPulse: _hintController?.value ?? 0,
+                                          gridOverlayOpacity: _gridOverlayOpacity,
+                                          smashingArrows: _buildSmashingAnimList(),
+                                        ),
+                                  size: Size(gridWidth, gridHeight),
+                                ),
                               ),
-                              size: Size(gridWidth, gridHeight),
                             ),
-                          ),
-                        ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   );
