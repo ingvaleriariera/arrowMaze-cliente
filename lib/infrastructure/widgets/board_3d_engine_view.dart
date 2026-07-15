@@ -72,7 +72,9 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
     final smoothed = <vector.Vector3>[];
     smoothed.add(points.first);
     
-    final double cornerRadius = 0.6 * cellSize;
+    // Small radius → straight segments with tight rounded corners,
+    // like a rectangle with rounded edges, not a swooping curve.
+    final double cornerRadius = 0.15 * cellSize;
     
     for (int i = 1; i < points.length - 1; i++) {
       final prev = points[i - 1];
@@ -95,8 +97,9 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
 
       smoothed.add(p1);
       
-      for (int j = 1; j < 12; j++) {
-        final t = j / 12.0;
+      // 4 subdivisions is enough for a small, tight corner
+      for (int j = 1; j < 4; j++) {
+        final t = j / 4.0;
         final invT = 1.0 - t;
         final curvePoint = (p1 * (invT * invT)) + (curr * (2 * invT * t)) + (p2 * (t * t));
         smoothed.add(curvePoint);
