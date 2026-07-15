@@ -788,12 +788,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   onChanged: (_) => settingsNotifier.toggleMute(),
                 ),
                 SwitchListTile(
-                  secondary: const Icon(Icons.music_note, color: Color(0xFF00F5A0)),
-                  title: Text(l10n.translate('music')),
-                  value: settingsState.musicEnabled,
-                  onChanged: (_) => settingsNotifier.toggleMusic(),
-                ),
-                SwitchListTile(
                   secondary: const Icon(Icons.vibration, color: Color(0xFF00F5A0)),
                   title: Text(l10n.translate('vibration')),
                   value: settingsState.vibrationEnabled,

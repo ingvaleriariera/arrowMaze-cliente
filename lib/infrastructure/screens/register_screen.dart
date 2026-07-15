@@ -218,7 +218,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        authState.error!,
+                        l10n.translate(authState.error!),
                         style: const TextStyle(
                           color: Colors.red,
                           fontSize: 14,

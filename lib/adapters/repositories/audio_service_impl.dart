@@ -26,6 +26,14 @@ class AudioServiceImpl implements IAudioService {
   bool _isMuted = false;
   String? _currentMusicTrack;
 
+  // Last track requested through playMusic(), kept even when the actual
+  // play() call failed. On Web, the very first playMusic() call happens on
+  // page load (no user gesture), so browser autoplay policies (Chrome,
+  // Safari) commonly reject it and music never starts. unmute() is called
+  // synchronously from the switch's onChanged — a real user gesture — so it
+  // retries playback from there, which the browser allows.
+  String? _lastRequestedTrack;
+
   /// Get the asset path for a given sound identifier.
   String _getAssetPath(String sound) {
     return 'assets/audio/$sound.mp3';
@@ -63,6 +71,8 @@ class AudioServiceImpl implements IAudioService {
 
   @override
   Future<void> playMusic(String track) async {
+    _lastRequestedTrack = track;
+
     if (_isMuted) {
       debugPrint('🔇 AudioServiceImpl: Music "$track" blocked (muted)');
       return;
@@ -143,6 +153,18 @@ class AudioServiceImpl implements IAudioService {
     // Restore volumes for both players
     _musicPlayer.setVolume(1.0);
     _effectsPlayer.setVolume(0.8);
+
+    // If music never actually started (e.g. blocked by a browser autoplay
+    // policy on the original page-load attempt), retry now: this call
+    // originates synchronously from the switch's onChanged, which counts
+    // as a user gesture and satisfies the autoplay policy.
+    if (!_musicPlayer.playing && _lastRequestedTrack != null) {
+      final track = _lastRequestedTrack!;
+      _currentMusicTrack = null; // bypass playMusic's already-playing dedup
+      playMusic(track).catchError((e) {
+        debugPrint('⚠️  AudioServiceImpl.unmute: Retry failed to start music - $e');
+      });
+    }
   }
 
   @override

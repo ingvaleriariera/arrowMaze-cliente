@@ -55,8 +55,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException catch (e) {
-      debugPrint('❌ AuthNotifier.login: Invalid credentials - ${e.message}');
+    } on AppException catch (e) {
+      debugPrint('❌ AuthNotifier.login: Auth exception - ${e.message}');
       state = state.copyWith(
         isLoading: false,
         error: e.message,
@@ -95,7 +95,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException catch (e) {
+    } on AppException catch (e) {
       debugPrint('❌ AuthNotifier.loginWithFaceId: Face ID failed - ${e.message}');
       state = state.copyWith(
         isLoading: false,
@@ -135,7 +135,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException catch (e) {
+    } on AppException catch (e) {
       debugPrint('❌ AuthNotifier.loginWithFaceIdAndEmail: Face ID failed - ${e.message}');
       state = state.copyWith(
         isLoading: false,
@@ -179,8 +179,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         debugPrint('⚠️  AuthNotifier: Background sync failed (non-blocking) - $e');
         debugPrint('   User still authenticated and can proceed');
       }
-    } on UnauthorizedException catch (e) {
-      debugPrint('❌ AuthNotifier.register: Email or username already exists - ${e.message}');
+    } on AppException catch (e) {
+      debugPrint('❌ AuthNotifier.register: Auth exception - ${e.message}');
       state = state.copyWith(
         isLoading: false,
         error: e.message,
