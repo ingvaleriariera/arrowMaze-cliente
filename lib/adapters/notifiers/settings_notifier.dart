@@ -18,10 +18,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
-  void toggleMusic() {
-    state = state.copyWith(musicEnabled: !state.musicEnabled);
-  }
-
   void toggleVibration() {
     state = state.copyWith(vibrationEnabled: !state.vibrationEnabled);
   }
