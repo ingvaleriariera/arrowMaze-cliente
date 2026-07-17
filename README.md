@@ -10,6 +10,10 @@
   <img src="https://img.shields.io/badge/tests-flutter__test-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Tests: flutter_test" />
 </p>
 
+<p align="center">
+  <a href="https://grupo11-arrowmaze.netlify.app/"><img src="https://img.shields.io/badge/▶️_Play_it_live-grupo11--arrowmaze.netlify.app-00C7B7?style=for-the-badge&logo=netlify&logoColor=white" alt="Live demo on Netlify" /></a>
+</p>
+
 ---
 
 ## 📖 Description
@@ -33,6 +37,9 @@ This repository is the **client only**. It needs the companion [`arrowMaze-backe
 ---
 
 ## 📸 Demo / Screenshots
+
+> [!TIP]
+> **Play the deployed web build:** [grupo11-arrowmaze.netlify.app](https://grupo11-arrowmaze.netlify.app/)
 
 <p align="center">
   <img src="docs/login.PNG" alt="Login screen" width="220" />
@@ -103,6 +110,25 @@ The core of the game is a dependency graph between arrows: each arrow is a node,
 ### Level generation
 
 The backend only ships the *shape* of a board (a JSON grid of valid/void cells). **Arrows are generated on the client** by `BoardBuilder`, seeded deterministically from `level.id.hashCode` so every player sees the same layout and leaderboard scores stay comparable, even though no arrow data ever crosses the network.
+
+---
+
+## 📁 UML Diagrams
+
+Architectural diagrams are maintained in two formats:
+
+- **PlantUML** (`.puml`) — source files stored in [`/docs`](docs), one per layer, version-controlled alongside the codebase.
+- **LucidChart** — a full interactive render of the client architecture: **[Frontend UML on LucidChart](https://lucid.app/lucidchart/49e45929-96c3-4110-ba7c-fbd1bca7bcc4/edit?viewport_loc=44597%2C33455%2C44457%2C24239%2C24jc53Kvfkdy&invitationId=inv_9170294c-6f82-42ae-8a50-dbbf83af8d13)**
+
+| File | Scope |
+| :--- | :--- |
+| `Code capa 1 - Frontend.puml` | Domain — entities, value objects, blocking graph, states, power-ups |
+| `Code capa 2 - Frontend.puml` | Application — use cases, DTOs, ports |
+| `Code capa 3 - Frontend.puml` | Adapters — Riverpod notifiers, repository implementations, mappers |
+| `Code capa 4 - Frontend.puml` | Infrastructure — screens, widgets, interceptors, platform services |
+
+> [!TIP]
+> Install the **PlantUML** extension for VS Code (`jebbs.plantuml`) to preview `.puml` files directly in the editor. The LucidChart link provides an interactive, shareable view for reviewers.
 
 ---
 
