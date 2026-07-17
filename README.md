@@ -575,7 +575,7 @@ flutter analyze lib
 
 ## 🤖 AI Usage Documentation
 
-*(Pending — a separate AI usage document has already been prepared and will be attached here.)*
+This project was developed with significant AI assistance, documented transparently as required by the course (Section 7). See **[AI_USAGE.md](AI_USAGE.md)** for the full record: tools and models used, per-task usage log, approximate percentage of AI-assisted code, cases where the AI produced incorrect results and how they were detected and corrected, and the team's reflection on productivity and code quality.
 
 ---
 
