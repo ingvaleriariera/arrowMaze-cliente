@@ -23,9 +23,10 @@ skinparam note {
 
 note as N1
   Clases de Capa 1 referenciadas aquí
-  (GameSession, Level, GameProgress, PowerUp,
-  MoveResult, PowerUpResult, BoardBuilder,
-  ILevelRepository, IGameProgressRepository)
+  (GameSession, Level, GameProgress, PlayerLives,
+  PowerUp, MoveResult, PowerUpResult, BoardBuilder,
+  ILevelRepository, IGameProgressRepository,
+  ILivesRepository, IBoardCache, ITimeLimitPolicy)
   no se redibujan. Las flechas apuntan
   hacia ellas como dependencias de C1.
 end note
@@ -36,16 +37,41 @@ end note
 
 class LoadLevelUseCase {
   - levelRepository: ILevelRepository
-  - boardBuilder: BoardBuilder
+  - boardCache: IBoardCache
+  - timeLimitPolicy: ITimeLimitPolicy
+  - boardDepth: int
   --
   + execute(levelId: String): GameSession
 }
 
 note right of LoadLevelUseCase
   1. Llama levelRepository.getLevel()
-  2. Parsea boardLayout con BoardShape.fromJson()
-  3. Construye el Board con BoardBuilder
-  4. Crea y retorna una GameSession nueva
+  2. Busca en boardCache un layout ya
+     generado para ese levelId+depth
+  3. Si no hay cache: genera el tablero
+     en un isolate (compute + BoardBuilder,
+     seed determinístico) y lo cachea
+  4. timeLimitPolicy calcula el cronómetro
+     si el nivel no trae uno explícito
+  5. Crea y retorna una GameSession nueva
+end note
+
+class PreloadLevelsUseCase {
+  - levelRepository: ILevelRepository
+  - boardCache: IBoardCache
+  - boardDepth: int
+  --
+  + execute(levelIds: List<String>, onProgress: Function?): void
+}
+
+note right of PreloadLevelsUseCase
+  Genera y cachea el layout de varios
+  niveles por adelantado (mismo cache
+  que LoadLevelUseCase, misma clave
+  levelId+depth) para que al entrar
+  al nivel ya no haya que generar.
+  Best-effort: un fallo no bloquea
+  el resto del lote.
 end note
 
 class ActivateArrowUseCase {
@@ -86,9 +112,14 @@ class GetLevelSummariesUseCase {
 
 note right of GetLevelSummariesUseCase
   Combina la lista de niveles del backend
-  con el progreso local del jugador para
-  construir la pantalla de selección
-  (completado, bloqueado, mejor puntaje).
+  con el progreso local del jugador.
+  Ordena por el sufijo numérico del id
+  (el orden del backend no está garantizado)
+  y calcula unlocked: el primer nivel
+  siempre desbloqueado, el resto cuando
+  el anterior en secuencia está completado.
+  El fallo al leer progreso no bloquea
+  la lista de niveles (progreso vacío).
 end note
 
 ' ─────────────────────────────────────────
@@ -104,13 +135,15 @@ class UsePowerUpUseCase {
 
 note right of UsePowerUpUseCase
   1. Verifica coins: progress.spendCoins(powerUp.getCost())
-  2. Si no alcanza → retorna PowerUpResult.failure()
-  3. Aplica: session.applyPowerUp(powerUp)
-  4. Persiste progreso actualizado
-  5. Reproduce efecto de sonido
+  2. Si no alcanza → retorna PowerUpResult.applyFailure()
+  3. Aplica vía session.applyPowerUp(powerUp) —no
+     powerUp.use() directo— para que un tablero
+     resuelto/deadlockeado por el power-up también
+     transicione el estado de GameSession
+  4. Si tuvo éxito: persiste progreso y reproduce sonido
+  5. Si falló: reembolsa las coins gastadas
   El tipo concreto de PowerUp (Hint/Hammer/Magnet)
   lo instancia el GameNotifier (Capa 3).
-  Agregar un nuevo power-up no cambia este UC.
 end note
 
 ' ─────────────────────────────────────────
@@ -134,6 +167,147 @@ class LogoutUseCase {
   --
   + execute(): void
 }
+
+class FaceIdLoginUseCase {
+  - authRepository: IAuthRepository
+  - biometricService: BiometricService
+  --
+  + canUseFaceId(): bool
+  + execute(): AuthResultDTO
+}
+
+note right of FaceIdLoginUseCase
+  Login biométrico "genérico": usa las
+  últimas credenciales biométricas
+  guardadas en el dispositivo, sin
+  atar el login a un email específico.
+  canUseFaceId() → hay credenciales
+  guardadas Y el sensor está disponible
+  (biometricService, C4).
+end note
+
+class FaceIdLoginWithEmailUseCase {
+  - authRepository: IAuthRepository
+  - biometricService: BiometricService
+  --
+  + canUseFaceIdForEmail(email: String): bool
+  + getSavedEmail(): String?
+  + execute(email: String): AuthResultDTO
+}
+
+note right of FaceIdLoginWithEmailUseCase
+  Variante ligada a un email puntual
+  (pantalla de login con el campo
+  prellenado). getSavedEmail() NO
+  dispara el prompt biométrico —
+  solo lee qué email quedó guardado
+  para prellenar el form.
+  execute() verifica que el email
+  guardado coincida con el pedido
+  antes de autenticar.
+end note
+
+' ─────────────────────────────────────────
+' CASOS DE USO — TABLEROS DE LA COMUNIDAD
+' ─────────────────────────────────────────
+
+class CreateCustomBoardUseCase {
+  - customBoardRepository: ICustomBoardRepository
+  - myBoardsRepository: IMyBoardsRepository
+  --
+  + execute(name: String, difficulty: String, grid: List<List<int>>): CustomBoardDTO
+}
+
+note right of CreateCustomBoardUseCase
+  Publica el tablero (grid → JSON
+  boardLayout) en el backend y lo
+  adopta automáticamente en la lista
+  local del creador — queda jugable
+  de inmediato para su autor.
+end note
+
+class DeleteCustomBoardUseCase {
+  - customBoardRepository: ICustomBoardRepository
+  --
+  + execute(boardId: String): void
+}
+
+note bottom of DeleteCustomBoardUseCase
+  La autoría se valida en el backend
+  vía JWT — el cliente no decide
+  quién puede borrar.
+end note
+
+class GetCommunityBoardsUseCase {
+  - customBoardRepository: ICustomBoardRepository
+  --
+  + execute(limit: int): List<CustomBoardDTO>
+}
+
+class ManageMyBoardsUseCase {
+  - myBoardsRepository: IMyBoardsRepository
+  --
+  + getAll(): List<CustomBoardDTO>
+  + add(board: CustomBoardDTO): void
+  + remove(id: String): void
+}
+
+note right of ManageMyBoardsUseCase
+  Agrupa lectura/adopción/eliminación
+  de la lista local de tableros
+  adoptados por el jugador — las tres
+  son operaciones triviales de un
+  solo paso sobre el mismo store.
+end note
+
+' ─────────────────────────────────────────
+' CASOS DE USO — VIDAS
+' ─────────────────────────────────────────
+
+class GetLivesUseCase {
+  - livesRepository: ILivesRepository
+  --
+  + execute(userId: String): PlayerLives
+}
+
+note right of GetLivesUseCase
+  Aplica regeneración pendiente al leer
+  (lazy, calculada desde timestamps
+  guardados) y persiste si el conteo
+  cambió respecto al almacenado.
+end note
+
+class LoseLifeUseCase {
+  - livesRepository: ILivesRepository
+  --
+  + execute(userId: String): PlayerLives
+}
+
+note right of LoseLifeUseCase
+  Descuenta 1 vida (derrota o abandono
+  a mitad de partida). Aplica primero
+  la regeneración pendiente para no
+  perderla silenciosamente antes de
+  restar.
+end note
+
+class BuyLifeUseCase {
+  + {static} lifeCostInCoins: int
+  - livesRepository: ILivesRepository
+  - progressRepository: IGameProgressRepository
+  --
+  + execute(userId: String): PlayerLives?
+}
+
+note right of BuyLifeUseCase
+  Orquesta dos repositorios para que el
+  canje sea atómico desde el punto de
+  vista del caller: las coins solo se
+  gastan si se puede otorgar la vida,
+  y la vida solo se otorga si alcanzaba
+  el saldo. Retorna null si el pool ya
+  está lleno o no hay coins suficientes.
+end note
 
 ' ─────────────────────────────────────────
 ' CASOS DE USO — PROGRESO
@@ -165,10 +339,30 @@ note right of SyncProgressUseCase
   resolver conflictos local vs backend.
 end note
 
+' ─────────────────────────────────────────
+' CASO DE USO — SCORE
+' ─────────────────────────────────────────
+
+class SubmitScoreUseCase {
+  - scoreRepository: IScoreRepository
+  --
+  + execute(userId: String, levelId: String, score: int): void
+}
+
+' ─────────────────────────────────────────
+' CASOS DE USO — LEADERBOARD
+' ─────────────────────────────────────────
+
 class GetLeaderboardUseCase {
   - leaderboardRepository: ILeaderboardRepository
   --
   + execute(levelId: String, limit: int): List<LeaderboardEntryDTO>
+}
+
+class GetGlobalLeaderboardUseCase {
+  - leaderboardRepository: ILeaderboardRepository
+  --
+  + execute(limit: int): List<GlobalLeaderboardEntryDTO>
 }
 
 ' ─────────────────────────────────────────
@@ -181,11 +375,17 @@ interface IAuthRepository {
   + logout(): void
   + getToken(): String?
   + isAuthenticated(): bool
+  + saveBiometricCredentials(email: String, password: String): void
+  + getBiometricCredentials(): (String, String)?
+  + hasSavedBiometricCredentials(): bool
+  + hasSavedCredentialsForEmail(email: String): bool
 }
 
 note right of IAuthRepository
   En C3: persiste el token con
-  flutter_secure_storage.
+  flutter_secure_storage y las
+  credenciales biométricas para
+  Face ID.
   En C3: implementa las llamadas HTTP
   al endpoint de auth del backend.
   Auth no es dominio del juego en el
@@ -194,6 +394,7 @@ end note
 
 interface ILeaderboardRepository {
   + getTopScores(levelId: String, limit: int): List<LeaderboardEntryDTO>
+  + getGlobalTopScores(limit: int): List<GlobalLeaderboardEntryDTO>
 }
 
 note right of ILeaderboardRepository
@@ -213,12 +414,44 @@ interface IAudioService {
   + isMuted(): bool
 }
 
+interface ICustomBoardRepository {
+  + create(name: String, difficulty: String, boardLayout: String): CustomBoardDTO
+  + fetchAll(limit: int): List<CustomBoardDTO>
+  + delete(id: String): void
+}
+
+note right of ICustomBoardRepository
+  Tableros de la comunidad (remotos,
+  backend). Solo la FORMA viaja — las
+  flechas se generan client-side con
+  seed determinístico por tablero.
+end note
+
+interface IMyBoardsRepository {
+  + getAll(): List<CustomBoardDTO>
+  + getById(id: String): CustomBoardDTO?
+  + add(board: CustomBoardDTO): void
+  + remove(id: String): void
+}
+
+note right of IMyBoardsRepository
+  Lista LOCAL de tableros adoptados
+  por el jugador ("agregar a mis
+  niveles"). Guarda el payload
+  completo para que sigan jugables
+  offline sin volver a pedirlos.
+end note
+
+interface IScoreRepository {
+  + submitScore(userId: String, levelId: String, score: int): void
+}
+
 ' ─────────────────────────────────────────
 ' DTOs
 ' ─────────────────────────────────────────
 
 class LoginInputDTO <<DTO>> {
-  + email: String
+  + emailOrUsername: String
   + password: String
 }
 
@@ -231,6 +464,7 @@ class RegisterInputDTO <<DTO>> {
 class AuthResultDTO <<DTO>> {
   + token: String
   + userId: String
+  + username: String
 }
 
 class LeaderboardEntryDTO <<DTO>> {
@@ -240,22 +474,53 @@ class LeaderboardEntryDTO <<DTO>> {
   + levelId: String
 }
 
+class GlobalLeaderboardEntryDTO <<DTO>> {
+  + rank: int
+  + username: String
+  + totalScore: int
+}
+
 class LevelSummaryDTO <<DTO>> {
   + levelId: String
   + difficulty: String
   + completed: bool
   + bestScore: int
   + isTimed: bool
+  + unlocked: bool
+  + displayName: String?
+}
+
+note right of LevelSummaryDTO
+  displayName sobreescribe el "Nivel N"
+  con el nombre del tablero cuando la
+  entrada es un tablero custom adoptado.
+end note
+
+class CustomBoardDTO <<DTO>> {
+  + id: String
+  + name: String
+  + authorId: String
+  + authorUsername: String
+  + difficulty: String
+  + boardLayout: String
+  + createdAt: String
+  --
+  + {static} fromJson(json: Map): CustomBoardDTO
+  + toJson(): Map
+  + decodeGrid(): List<List<int>>
 }
 
 ' ─────────────────────────────────────────
 ' RELACIONES
 ' ─────────────────────────────────────────
 
-' LoadLevelUseCase
-LoadLevelUseCase --> ILevelRepository  : uses (C1)
-LoadLevelUseCase --> BoardBuilder      : uses (C1)
-LoadLevelUseCase ..> GameSession       : <<creates>>
+' LoadLevelUseCase / PreloadLevelsUseCase
+LoadLevelUseCase --> ILevelRepository    : uses (C1)
+LoadLevelUseCase --> IBoardCache         : uses (C1)
+LoadLevelUseCase --> ITimeLimitPolicy    : uses (C1)
+LoadLevelUseCase ..> GameSession         : <<creates>>
+PreloadLevelsUseCase --> ILevelRepository : uses (C1)
+PreloadLevelsUseCase --> IBoardCache      : uses (C1)
 
 ' ActivateArrowUseCase
 ActivateArrowUseCase --> GameSession   : uses (C1)
@@ -291,6 +556,26 @@ LoginUseCase    --> LoginInputDTO    : uses
 RegisterUseCase --> RegisterInputDTO : uses
 LoginUseCase    ..> AuthResultDTO    : <<returns>>
 RegisterUseCase ..> AuthResultDTO    : <<returns>>
+FaceIdLoginUseCase          --> IAuthRepository : uses
+FaceIdLoginWithEmailUseCase --> IAuthRepository : uses
+FaceIdLoginUseCase          ..> AuthResultDTO   : <<returns>>
+FaceIdLoginWithEmailUseCase ..> AuthResultDTO   : <<returns>>
+
+' Tableros de la comunidad
+CreateCustomBoardUseCase --> ICustomBoardRepository : uses
+CreateCustomBoardUseCase --> IMyBoardsRepository    : uses
+CreateCustomBoardUseCase ..> CustomBoardDTO         : <<returns>>
+DeleteCustomBoardUseCase --> ICustomBoardRepository : uses
+GetCommunityBoardsUseCase --> ICustomBoardRepository : uses
+GetCommunityBoardsUseCase ..> CustomBoardDTO        : <<returns>>
+ManageMyBoardsUseCase --> IMyBoardsRepository       : uses
+ManageMyBoardsUseCase ..> CustomBoardDTO            : <<returns>>
+
+' Vidas
+GetLivesUseCase --> ILivesRepository          : uses (C1)
+LoseLifeUseCase --> ILivesRepository          : uses (C1)
+BuyLifeUseCase  --> ILivesRepository          : uses (C1)
+BuyLifeUseCase  --> IGameProgressRepository   : uses (C1)
 
 ' Progreso
 SaveProgressUseCase     --> IGameProgressRepository : uses (C1)
@@ -298,12 +583,20 @@ SaveProgressUseCase     --> GameProgress            : uses (C1)
 GetLocalProgressUseCase --> IGameProgressRepository : uses (C1)
 SyncProgressUseCase     --> IGameProgressRepository : uses (C1)
 
+' Score
+SubmitScoreUseCase --> IScoreRepository : uses
+
 ' Leaderboard
-GetLeaderboardUseCase --> ILeaderboardRepository : uses
-GetLeaderboardUseCase ..> LeaderboardEntryDTO    : <<returns>>
+GetLeaderboardUseCase       --> ILeaderboardRepository : uses
+GetLeaderboardUseCase       ..> LeaderboardEntryDTO     : <<returns>>
+GetGlobalLeaderboardUseCase --> ILeaderboardRepository : uses
+GetGlobalLeaderboardUseCase ..> GlobalLeaderboardEntryDTO : <<returns>>
 
 ' DTOs relacionados a ports
 IAuthRepository        ..> AuthResultDTO        : <<returns>>
 ILeaderboardRepository ..> LeaderboardEntryDTO  : <<returns>>
+ILeaderboardRepository ..> GlobalLeaderboardEntryDTO : <<returns>>
+ICustomBoardRepository ..> CustomBoardDTO       : <<returns>>
+IMyBoardsRepository    ..> CustomBoardDTO       : <<returns>>
 
 @enduml

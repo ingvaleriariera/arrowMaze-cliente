@@ -28,7 +28,8 @@ note as N1
      casos de uso (C2). Guardan el estado.
   2. Implementaciones de repositorios = Adapters:
      conectan los puertos de C1 y C2
-     con los frameworks de C4 (sqflite, HTTP).
+     con los frameworks de C4 (sqflite,
+     shared_preferences, HTTP, secure storage).
 end note
 
 ' ─────────────────────────────────────────
@@ -39,82 +40,155 @@ class GameNotifier <<StateNotifier>> {
   - session: GameSession?
   - progress: GameProgress?
   - timer: Timer?
+  - userId: String?
   - loadLevelUseCase: LoadLevelUseCase
   - activateArrowUseCase: ActivateArrowUseCase
-  - pauseUseCase: PauseLevelUseCase
-  - resumeUseCase: ResumeLevelUseCase
-  - restartUseCase: RestartLevelUseCase
+  - pauseLevelUseCase: PauseLevelUseCase
+  - resumeLevelUseCase: ResumeLevelUseCase
+  - restartLevelUseCase: RestartLevelUseCase
   - usePowerUpUseCase: UsePowerUpUseCase
   - saveProgressUseCase: SaveProgressUseCase
-  - syncProgressUseCase: SyncProgressUseCase
-  - getProgressUseCase: GetLocalProgressUseCase
+  - getLocalProgressUseCase: GetLocalProgressUseCase
+  - preloadLevelsUseCase: PreloadLevelsUseCase
+  - submitScoreUseCase: SubmitScoreUseCase
+  - getVibrationEnabled: bool Function()
+  - audioObserver: IGameObserver
+  - audioService: IAudioService
   --
-  + loadLevel(levelId: String): void
+  + loadLevel(levelId: String, userId: String): void
   + activateArrow(arrowId: String): void
-  + useHint(): void
-  + useHammer(arrowId: String): void
-  + useMagnet(direction: Direction): void
+  + usePowerUp(powerUp: PowerUp): PowerUpResult?
   + pause(): void
   + resume(): void
-  + restart(): void
-  - startTimer(): void
-  - stopTimer(): void
+  + restart(levelId: String, userId: String): void
+  + stopTimer(): void
+  - _startTimer(): void
+  - _stopTimer(): void
+  - _handleSessionOverIfNeeded(): void
+  - _nextLevelIds(levelId: String, count: int): List<String>
+  - _triggerHaptic(hapticCall: Function): void
 }
 
 note right of GameNotifier
   startTimer() crea un Timer.periodic
   (dart:async, C4) que llama
   session.tick() cada segundo.
-  stopTimer() lo cancela.
-  useHint/Hammer/Magnet() instancian
-  el PowerUp concreto y lo pasan a
-  UsePowerUpUseCase.
+  loadLevel() suscribe audioObserver a la
+  GameSession (Patrón Observer, C1/C3) y
+  dispara preloadLevelsUseCase en segundo
+  plano para los próximos 2 niveles.
+  _handleSessionOverIfNeeded() persiste
+  progreso y envía el score al leaderboard
+  — salvo en tableros custom (free play).
 end note
 
 class AuthNotifier <<StateNotifier>> {
-  - isAuthenticated: bool
-  - userId: String?
   - loginUseCase: LoginUseCase
   - registerUseCase: RegisterUseCase
   - logoutUseCase: LogoutUseCase
   - syncProgressUseCase: SyncProgressUseCase
+  - faceIdLoginUseCase: FaceIdLoginUseCase
+  - faceIdLoginWithEmailUseCase: FaceIdLoginWithEmailUseCase
   --
-  + login(email: String, password: String): void
+  + login(emailOrUsername: String, password: String): void
+  + loginWithFaceId(): void
+  + loginWithFaceIdAndEmail(email: String): void
   + register(email: String, username: String, password: String): void
   + logout(): void
-  + getIsAuthenticated(): bool
-  + getUserId(): String?
+  + checkAuth(): void
+  + clearError(): void
 }
 
 note right of AuthNotifier
-  login() → tras autenticar, llama
-  syncProgressUseCase.execute(userId)
-  para traer el progreso del servidor
-  y actualizar el local.
+  login()/register()/loginWithFaceId*()
+  actualizan el estado de inmediato y
+  disparan syncProgressUseCase en background
+  (no bloqueante: un fallo de sync no
+  deslogea al usuario).
 end note
 
 class LevelSelectNotifier <<StateNotifier>> {
-  - levels: List<LevelSummaryDTO>
   - getLevelSummariesUseCase: GetLevelSummariesUseCase
+  - preloadLevelsUseCase: PreloadLevelsUseCase
+  - manageMyBoardsUseCase: ManageMyBoardsUseCase
+  - audioService: IAudioService
   --
   + loadSummaries(userId: String): void
-  + getLevels(): List<LevelSummaryDTO>
+  + preloadAllLevels(): void
 }
 
+note right of LevelSelectNotifier
+  loadSummaries() combina niveles estándar
+  con los tableros custom adoptados
+  (manageMyBoardsUseCase), usando
+  CustomAwareLevelRepository.levelIdFor()
+  para generar sus ids "custom-...".
+end note
+
 class LeaderboardNotifier <<StateNotifier>> {
-  - entries: List<LeaderboardEntryDTO>
   - getLeaderboardUseCase: GetLeaderboardUseCase
+  - getGlobalLeaderboardUseCase: GetGlobalLeaderboardUseCase
   --
   + loadLeaderboard(levelId: String): void
-  + getEntries(): List<LeaderboardEntryDTO>
+  + loadGlobalLeaderboard(): void
 }
 
 class SettingsNotifier <<StateNotifier>> {
-  - isMuted: bool
   - audioService: IAudioService
   --
   + toggleMute(): void
-  + getIsMuted(): bool
+  + toggleVibration(): void
+  + toggleBoard3D(): void
+  + toggleGame3D(): void
+}
+
+class BoardsNotifier <<StateNotifier>> {
+  - getCommunityBoardsUseCase: GetCommunityBoardsUseCase
+  - manageMyBoardsUseCase: ManageMyBoardsUseCase
+  - createCustomBoardUseCase: CreateCustomBoardUseCase
+  - deleteCustomBoardUseCase: DeleteCustomBoardUseCase
+  --
+  + loadAll(): void
+  + deleteOwn(boardId: String): bool
+  + adopt(board: CustomBoardDTO): void
+  + removeFromMine(boardId: String): void
+  + create(name: String, difficulty: String, grid: List<List<int>>): bool
+}
+
+note right of BoardsNotifier
+  Presenter del editor de tableros de la
+  comunidad. loadAll() carga primero "Míos"
+  (nunca depende de red) y luego sana copias
+  locales obsoletas con datos frescos del
+  servidor (autorUsername/authorId).
+end note
+
+class LivesNotifier <<StateNotifier>> {
+  - getLivesUseCase: GetLivesUseCase
+  - loseLifeUseCase: LoseLifeUseCase
+  - buyLifeUseCase: BuyLifeUseCase
+  - userId: String?
+  - ticker: Timer?
+  --
+  + load(userId: String): void
+  + loseLife(): void
+  + buyLife(): bool
+  - _emit(lives: PlayerLives): void
+  - _syncTicker(lives: PlayerLives): void
+}
+
+note right of LivesNotifier
+  Único dueño de toda mutación de vidas.
+  _syncTicker() corre un Timer.periodic
+  de 1s (solo mientras el pool no está
+  lleno) para refrescar la cuenta regresiva
+  y disparar la regeneración cuando vence.
+end note
+
+class LocaleNotifier <<StateNotifier>> {
+  --
+  + setLocale(locale: Locale): void
+  + toggleLanguage(): void
 }
 
 ' ─────────────────────────────────────────
@@ -127,6 +201,7 @@ class ApiClient <<Facade>> {
   --
   + setToken(token: String): void
   + clearToken(): void
+  + addInterceptor(interceptor: Interceptor): void
   + get(path: String): Map
   + post(path: String, body: Map): Map
   + put(path: String, body: Map): Map
@@ -136,10 +211,10 @@ class ApiClient <<Facade>> {
 note right of ApiClient
   Patrón Facade (Estructural).
   Simplifica el acceso HTTP a todos
-  los endpoints del backend.
-  Agrega el JWT header automáticamente
-  en cada request.
-  Oculta la complejidad de Dio (C4).
+  los endpoints del backend con Dio (C4).
+  addInterceptor() es el punto de enganche
+  de los aspectos AOP de Capa 4
+  (Auth/Logging/Error interceptors).
   Todos los repositorios remotos
   lo usan como único punto de acceso.
 end note
@@ -151,6 +226,7 @@ end note
 class LevelRepositoryImpl <<Adapter>> {
   - apiClient: ApiClient
   - levelMapper: LevelMapper
+  - levelsCache: List<Level>?
   --
   + getLevel(levelId: String): Level
   + getLevels(): List<Level>
@@ -161,56 +237,152 @@ note bottom of LevelRepositoryImpl
   Implementa ILevelRepository (C1).
   Llama al backend vía ApiClient y
   convierte JSON → Level con LevelMapper.
+  El backend no expone GET /levels/:id,
+  así que getLevel() cachea la lista
+  completa y filtra en memoria.
+end note
+
+class CustomAwareLevelRepository <<Decorator>> {
+  - inner: ILevelRepository
+  - myBoards: IMyBoardsRepository
+  --
+  + {static} levelIdFor(boardId: String): String
+  + {static} isCustomLevelId(levelId: String): bool
+  + getLevel(levelId: String): Level
+  + getLevels(): List<Level>
+  + getLevelsByDifficulty(difficulty: String): List<Level>
+}
+
+note bottom of CustomAwareLevelRepository
+  Patrón Decorator (Estructural).
+  Envuelve ILevelRepository: ids con prefijo
+  "custom-" se resuelven contra los tableros
+  adoptados localmente (myBoards) y se
+  adaptan a un Level normal; todo lo demás
+  se delega sin tocar al repositorio interno.
+  Es el proveedor real de levelRepositoryProvider
+  (providers.dart) — el pipeline de juego
+  nunca distingue tableros de jugadores.
 end note
 
 class GameProgressRepositoryImpl <<Adapter>> {
   - apiClient: ApiClient
   - progressMapper: ProgressMapper
+  - database: IGameProgressLocalStore
+  - localCache: Map<String, GameProgress>
   --
   + save(progress: GameProgress): void
   + get(userId: String): GameProgress?
   + sync(userId: String): GameProgress
+  - _reconstructProgressFromDatabase(dbRecord: Map, userId: String): GameProgress
 }
 
 note bottom of GameProgressRepositoryImpl
   Implementa IGameProgressRepository (C1).
-  save() y get() → sqflite (C4).
-  sync() → compara local con backend
-  vía ApiClient y resuelve conflictos
-  (last-write-wins por defecto).
+  save()/get() → cache en memoria +
+  IGameProgressLocalStore (sqflite en móvil,
+  shared_preferences en Web — ver providers.dart).
+  sync() → compara local con backend vía
+  ApiClient; last-write-wins para niveles,
+  max(local, servidor) como resguardo de coins.
 end note
 
 class AuthRepositoryImpl <<Adapter>> {
   - apiClient: ApiClient
+  - secureStorage: FlutterSecureStorage
   --
   + login(email: String, password: String): AuthResultDTO
   + register(email: String, username: String, password: String): AuthResultDTO
   + logout(): void
   + getToken(): String?
   + isAuthenticated(): bool
+  + saveBiometricCredentials(email: String, password: String): void
+  + getBiometricCredentials(): (String, String)?
+  + hasSavedBiometricCredentials(): bool
+  + hasSavedCredentialsForEmail(email: String): bool
 }
 
 note bottom of AuthRepositoryImpl
   Implementa IAuthRepository (C2).
-  Llama /auth/login y /auth/register
-  vía ApiClient.
-  Persiste el JWT con
-  flutter_secure_storage (C4).
+  Llama /auth/login y /auth/register vía
+  ApiClient. Persiste JWT y credenciales
+  para Face ID con flutter_secure_storage (C4).
+  logout() borra el token pero conserva las
+  credenciales biométricas para el siguiente login.
 end note
 
 class LeaderboardRepositoryImpl <<Adapter>> {
   - apiClient: ApiClient
   --
   + getTopScores(levelId: String, limit: int): List<LeaderboardEntryDTO>
+  + getGlobalTopScores(limit: int): List<GlobalLeaderboardEntryDTO>
 }
 
 note bottom of LeaderboardRepositoryImpl
   Implementa ILeaderboardRepository (C2).
-  Llama /leaderboard/{levelId} vía ApiClient.
+  Llama /leaderboard/{levelId} y
+  /leaderboard/global vía ApiClient.
 end note
 
-class AudioServiceImpl <<Adapter>> {
+class ScoreRepositoryImpl <<Adapter>> {
+  - apiClient: ApiClient
+  --
+  + submitScore(userId: String, levelId: String, score: int): void
+}
+
+note bottom of ScoreRepositoryImpl
+  Implementa IScoreRepository (C2).
+  Llama POST /scores/submit vía ApiClient.
+  Alimenta el leaderboard por nivel,
+  separado del progreso sincronizado.
+end note
+
+class CustomBoardRepositoryImpl <<Adapter>> {
+  - apiClient: ApiClient
+  --
+  + create(name: String, difficulty: String, boardLayout: String): CustomBoardDTO
+  + fetchAll(limit: int): List<CustomBoardDTO>
+  + delete(id: String): void
+}
+
+note bottom of CustomBoardRepositoryImpl
+  Implementa ICustomBoardRepository (C2).
+  CRUD de tableros de la comunidad contra
+  /api/v1/custom-boards vía ApiClient.
+end note
+
+class MyBoardsRepositoryImpl <<Adapter>> {
+  --
+  + getAll(): List<CustomBoardDTO>
+  + getById(id: String): CustomBoardDTO?
+  + add(board: CustomBoardDTO): void
+  + remove(id: String): void
+}
+
+note bottom of MyBoardsRepositoryImpl
+  Implementa IMyBoardsRepository (C2).
+  Copia local de tableros adoptados en
+  SharedPreferences (C4), device-wide
+  (no por usuario) — jugable offline.
+end note
+
+class LivesRepositoryImpl <<Adapter>> {
+  --
+  + load(userId: String): PlayerLives
+  + save(userId: String, lives: PlayerLives): void
+}
+
+note bottom of LivesRepositoryImpl
+  Implementa ILivesRepository (C1).
+  Persiste el pool de vidas en
+  SharedPreferences (C4), por usuario,
+  deliberadamente fuera del sync de progreso.
+end note
+
+class AudioServiceImpl <<Adapter, Singleton>> {
   - isMuted: bool
+  - currentMusicTrack: String?
+  - lastRequestedTrack: String?
   --
   + playEffect(sound: String): void
   + playMusic(track: String): void
@@ -218,12 +390,108 @@ class AudioServiceImpl <<Adapter>> {
   + mute(): void
   + unmute(): void
   + isMuted(): bool
+  + dispose(): void
 }
 
 note bottom of AudioServiceImpl
   Implementa IAudioService (C2).
-  Usa just_audio o audioplayers (C4).
-  isMuted persiste en SharedPreferences (C4).
+  Patrón Singleton (Creacional): constructor
+  factory + instancia estática — un solo par
+  de AudioPlayers (música/efectos) en toda la app.
+  Usa just_audio (C4). lastRequestedTrack permite
+  reintentar la música en unmute() cuando el
+  navegador bloqueó el autoplay inicial (Web).
+end note
+
+class GameProgressDatabase <<Adapter, Singleton>> {
+  --
+  + getProgress(userId: String): Map?
+  + saveProgress(userId: String, completedLevels: List<String>, bestScores: Map<String,int>, coins: int, avatarEmoji: String): void
+  + deleteProgress(userId: String): void
+  + closeDatabase(): void
+}
+
+note bottom of GameProgressDatabase
+  Implementa IGameProgressLocalStore.
+  Patrón Singleton (Creacional): constructor
+  factory + instancia estática — una sola
+  conexión sqflite (C4) por proceso.
+  Backend de GameProgressRepositoryImpl
+  en plataformas móviles.
+end note
+
+class WebGameProgressStore <<Adapter>> {
+  - prefs: SharedPreferences
+  --
+  + getProgress(userId: String): Map?
+  + saveProgress(userId: String, completedLevels: List<String>, bestScores: Map<String,int>, coins: int, avatarEmoji: String): void
+  + deleteProgress(userId: String): void
+  + closeDatabase(): void
+}
+
+note bottom of WebGameProgressStore
+  Implementa IGameProgressLocalStore.
+  Contraparte Web de GameProgressDatabase:
+  sqflite no corre en Flutter Web, así que
+  este adapter persiste la misma forma de
+  fila en SharedPreferences (localStorage, C4).
+  Elegido en runtime por providers.dart
+  según kIsWeb (Patrón Strategy).
+end note
+
+class InMemoryBoardCache <<Adapter>> {
+  - layouts: Map<String, List<Arrow>>
+  --
+  + has(levelId: String): bool
+  + put(levelId: String, arrows: List<Arrow>): void
+  + get(levelId: String): List<Arrow>?
+}
+
+note bottom of InMemoryBoardCache
+  Implementa IBoardCache (C1).
+  Cachea tableros generados procedimentalmente
+  (compartido por LoadLevelUseCase y
+  PreloadLevelsUseCase, C2). Vive solo mientras
+  dura el proceso: el seed determinístico hace
+  innecesaria la persistencia entre reinicios.
+end note
+
+class AudioObserver <<Adapter, Observer>> {
+  - audioService: IAudioService
+  --
+  + onPlayerMoved(result: MoveResult): void
+  + onScoreUpdated(newScore: int): void
+  + onLevelCompleted(success: bool, finalScore: int): void
+}
+
+note bottom of AudioObserver
+  Implementa IGameObserver (C1).
+  Patrón Observer (Comportamiento):
+  GameSession (C1, Subject) notifica eventos
+  de juego; AudioObserver (Listener concreto)
+  reacciona deteniendo la música y reproduciendo
+  el efecto de victoria/derrota — el dominio
+  del juego no sabe que el audio existe.
+end note
+
+' ─────────────────────────────────────────
+' PUERTO INTERNO DE ADAPTERS
+' ─────────────────────────────────────────
+
+interface IGameProgressLocalStore {
+  + getProgress(userId: String): Map?
+  + saveProgress(userId: String, completedLevels: List<String>, bestScores: Map<String,int>, coins: int, avatarEmoji: String): void
+  + deleteProgress(userId: String): void
+  + closeDatabase(): void
+}
+
+note right of IGameProgressLocalStore
+  Puerto propio de Capa 3 (no C1/C2):
+  abstrae el backend de almacenamiento local
+  detrás de GameProgressRepositoryImpl,
+  para que sqflite y shared_preferences
+  sean intercambiables sin tocar la lógica
+  de cache/sync que corre por encima.
 end note
 
 ' ─────────────────────────────────────────
@@ -233,62 +501,101 @@ end note
 class LevelMapper {
   --
   + fromJson(json: Map): Level
+  + fromJsonList(jsonList: List): List<Level>
   + arrowFromJson(json: Map): Arrow
+  - _parseDirection(directionStr: String): Direction
 }
 
 class ProgressMapper {
   --
-  + fromMap(map: Map): GameProgress
+  + fromMap(map: Map, userId: String): GameProgress
   + toMap(progress: GameProgress): Map
 }
 
 note right of ProgressMapper
-  fromMap() → convierte fila de sqflite a GameProgress.
-  toMap()   → convierte GameProgress a fila para sqflite.
+  fromMap() → convierte la respuesta de
+  /progress/sync (o fila local) a GameProgress.
+  toMap()   → convierte GameProgress al body
+  esperado por el backend. avatarEmoji nunca
+  viaja por el backend: se preserva localmente.
 end note
 
 ' ─────────────────────────────────────────
 ' RELACIONES — StateNotifiers → Use Cases (C2)
 ' ─────────────────────────────────────────
 
-GameNotifier --> LoadLevelUseCase       : uses (C2)
-GameNotifier --> ActivateArrowUseCase   : uses (C2)
-GameNotifier --> PauseLevelUseCase      : uses (C2)
-GameNotifier --> ResumeLevelUseCase     : uses (C2)
-GameNotifier --> RestartLevelUseCase    : uses (C2)
-GameNotifier --> UsePowerUpUseCase      : uses (C2)
-GameNotifier --> SaveProgressUseCase    : uses (C2)
-GameNotifier --> SyncProgressUseCase    : uses (C2)
+GameNotifier --> LoadLevelUseCase        : uses (C2)
+GameNotifier --> ActivateArrowUseCase    : uses (C2)
+GameNotifier --> PauseLevelUseCase       : uses (C2)
+GameNotifier --> ResumeLevelUseCase      : uses (C2)
+GameNotifier --> RestartLevelUseCase     : uses (C2)
+GameNotifier --> UsePowerUpUseCase       : uses (C2)
+GameNotifier --> SaveProgressUseCase     : uses (C2)
 GameNotifier --> GetLocalProgressUseCase : uses (C2)
+GameNotifier --> PreloadLevelsUseCase    : uses (C2)
+GameNotifier --> SubmitScoreUseCase      : uses (C2)
+GameNotifier --> IGameObserver           : uses (C1)
 
-AuthNotifier      --> LoginUseCase          : uses (C2)
-AuthNotifier      --> RegisterUseCase       : uses (C2)
-AuthNotifier      --> LogoutUseCase         : uses (C2)
-AuthNotifier      --> SyncProgressUseCase   : uses (C2)
+AuthNotifier --> LoginUseCase                  : uses (C2)
+AuthNotifier --> RegisterUseCase               : uses (C2)
+AuthNotifier --> LogoutUseCase                 : uses (C2)
+AuthNotifier --> SyncProgressUseCase           : uses (C2)
+AuthNotifier --> FaceIdLoginUseCase            : uses (C2)
+AuthNotifier --> FaceIdLoginWithEmailUseCase   : uses (C2)
 
 LevelSelectNotifier --> GetLevelSummariesUseCase : uses (C2)
-LeaderboardNotifier --> GetLeaderboardUseCase    : uses (C2)
-SettingsNotifier    --> IAudioService            : uses (C2)
+LevelSelectNotifier --> PreloadLevelsUseCase     : uses (C2)
+LevelSelectNotifier --> ManageMyBoardsUseCase    : uses (C2)
+LevelSelectNotifier --> IAudioService            : uses (C2)
+
+LeaderboardNotifier --> GetLeaderboardUseCase       : uses (C2)
+LeaderboardNotifier --> GetGlobalLeaderboardUseCase : uses (C2)
+
+SettingsNotifier --> IAudioService : uses (C2)
+
+BoardsNotifier --> GetCommunityBoardsUseCase : uses (C2)
+BoardsNotifier --> ManageMyBoardsUseCase     : uses (C2)
+BoardsNotifier --> CreateCustomBoardUseCase  : uses (C2)
+BoardsNotifier --> DeleteCustomBoardUseCase  : uses (C2)
+
+LivesNotifier --> GetLivesUseCase : uses (C2)
+LivesNotifier --> LoseLifeUseCase : uses (C2)
+LivesNotifier --> BuyLifeUseCase  : uses (C2)
 
 ' ─────────────────────────────────────────
 ' RELACIONES — Implementations → Interfaces
 ' ─────────────────────────────────────────
 
-LevelRepositoryImpl       ..|> ILevelRepository          : implements (C1)
+LevelRepositoryImpl        ..|> ILevelRepository          : implements (C1)
+CustomAwareLevelRepository ..|> ILevelRepository          : implements (C1)
 GameProgressRepositoryImpl ..|> IGameProgressRepository   : implements (C1)
 AuthRepositoryImpl         ..|> IAuthRepository           : implements (C2)
 LeaderboardRepositoryImpl  ..|> ILeaderboardRepository    : implements (C2)
-AudioServiceImpl           ..|> IAudioService             : implements (C2)
+ScoreRepositoryImpl        ..|> IScoreRepository          : implements (C2)
+CustomBoardRepositoryImpl  ..|> ICustomBoardRepository    : implements (C2)
+MyBoardsRepositoryImpl     ..|> IMyBoardsRepository       : implements (C2)
+LivesRepositoryImpl        ..|> ILivesRepository          : implements (C1)
+AudioServiceImpl           ..|> IAudioService              : implements (C2)
+InMemoryBoardCache         ..|> IBoardCache               : implements (C1)
+AudioObserver              ..|> IGameObserver             : implements (C1)
+GameProgressDatabase       ..|> IGameProgressLocalStore
+WebGameProgressStore       ..|> IGameProgressLocalStore
 
 ' ─────────────────────────────────────────
-' RELACIONES — Repositories → ApiClient y Mappers
+' RELACIONES — Decorator, Repositories → ApiClient/Mappers/Store
 ' ─────────────────────────────────────────
+
+CustomAwareLevelRepository o-- "1" ILevelRepository     : wraps (Decorator)
+CustomAwareLevelRepository --> IMyBoardsRepository      : uses (C2)
 
 LevelRepositoryImpl        --> ApiClient      : uses
 LevelRepositoryImpl        --> LevelMapper    : uses
 GameProgressRepositoryImpl --> ApiClient      : uses
 GameProgressRepositoryImpl --> ProgressMapper : uses
+GameProgressRepositoryImpl --> IGameProgressLocalStore : uses
 AuthRepositoryImpl         --> ApiClient      : uses
 LeaderboardRepositoryImpl  --> ApiClient      : uses
+ScoreRepositoryImpl        --> ApiClient      : uses
+CustomBoardRepositoryImpl  --> ApiClient      : uses
 
 @enduml
