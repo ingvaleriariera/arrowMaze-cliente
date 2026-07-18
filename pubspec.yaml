@@ -27,6 +27,18 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+# ditredi 2.0.2 (pub.dev) leaks a permanent DiTreDiController listener on
+# every CanvasModelPainter it constructs — i.e. on every DiTreDi widget
+# rebuild — with no way to remove it, since CustomPainter (its real
+# superclass) has no dispose() hook. On an animated 3D board that's
+# thousands of leaked painters (plus their full geometry) per play session,
+# which is what was causing the Out of Memory crashes on large boards. See
+# third_party/ditredi/lib/src/painter/canvas_model_painter.dart for the
+# one-line fix (the leaking listener call removed).
+dependency_overrides:
+  ditredi:
+    path: third_party/ditredi
+
 flutter:
   uses-material-design: true
 

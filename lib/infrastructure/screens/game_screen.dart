@@ -96,6 +96,13 @@ class _GameScreenState extends ConsumerState<GameScreen>
   bool _loadInitiated = false;
   final Map<String, _PendingExit> _pendingExits = {};
   final Map<String, _PendingSmash> _pendingSmashes = {};
+  // Arrows currently mid-tap, and a screen-wide version of the same idea.
+  // See _handleArrowTap's doc comment for why both are needed: the
+  // per-arrow set alone doesn't stop a burst of taps on many *different*
+  // arrows from piling up concurrent activateArrow() calls — confirmed
+  // on-device to actually OOM-crash the app, not just lag.
+  final Set<String> _busyArrowIds = {};
+  bool _isHandlingTap = false;
   late TransformationController _transformationController;
 
   // Power-up UI state. `_pendingPowerUp` is non-null while waiting for the
@@ -183,6 +190,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
       smash.controller.dispose();
     }
     _pendingSmashes.clear();
+    // Was missing: a level restart/reload while an exit animation was
+    // still in flight left its AnimationController orphaned — still
+    // ticking, still calling setState(), against Position/Direction/color
+    // data snapshotted from the arrow of a board that no longer exists
+    // (loadLevel() just replaced it with a brand new Board/GameSession).
+    for (final exit in _pendingExits.values) {
+      exit.controller.dispose();
+    }
+    _pendingExits.clear();
+    _busyArrowIds.clear();
+    _isHandlingTap = false;
   }
 
   // GameNotifier saves completion progress keyed by this id, and
@@ -192,6 +210,14 @@ class _GameScreenState extends ConsumerState<GameScreen>
   String _currentUserId() => ref.read(authNotifierProvider).userId ?? 'guest';
 
   void _startExitAnimation(Arrow arrow, BoardShape shape) {
+    // A controller already in flight for this id (shouldn't happen now
+    // that taps are guarded by _busyArrowIds, but stay defensive) must be
+    // disposed before being replaced — overwriting the map entry directly
+    // orphans the old AnimationController, which keeps ticking and
+    // calling setState() on every frame with nothing left able to stop it
+    // early or find it again to dispose it on demand.
+    _pendingExits.remove(arrow.id)?.controller.dispose();
+
     final controller = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -208,7 +234,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     controller.addListener(() => setState(() {}));
     controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        setState(() => _pendingExits.remove(arrow.id));
+        setState(() {
+          _pendingExits.remove(arrow.id);
+          _busyArrowIds.remove(arrow.id);
+        });
         controller.dispose();
       }
     });
@@ -236,6 +265,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
   /// time that Future resolves, the arrow is already gone from
   /// `board.arrows`.
   void _startSmashAnimation(Arrow arrow) {
+    // See _startExitAnimation — same defensive dispose-before-replace.
+    _pendingSmashes.remove(arrow.id)?.controller.dispose();
+
     final controller = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
@@ -251,7 +283,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     controller.addListener(() => setState(() {}));
     controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        setState(() => _pendingSmashes.remove(arrow.id));
+        setState(() {
+          _pendingSmashes.remove(arrow.id);
+          _busyArrowIds.remove(arrow.id);
+        });
         controller.dispose();
       }
     });
@@ -323,6 +358,62 @@ class _GameScreenState extends ConsumerState<GameScreen>
       }
     });
     controller.forward();
+  }
+
+  /// Shared by both the 2D and 3D tap handlers (previously duplicated,
+  /// which was how a bug could go fixed in one path and not the other).
+  ///
+  /// [_isHandlingTap] serializes taps screen-wide, not just per-arrow:
+  /// tapping many *different* arrows in quick succession used to fire that
+  /// many concurrent, unawaited gameNotifier.activateArrow() calls at
+  /// once, each triggering its own Riverpod state update + full 3D scene
+  /// rebuild (Board3DEngineView/ditredi reallocates its render buffers
+  /// from scratch every rebuild). Nothing capped how many of those could
+  /// be in flight simultaneously, so a fast multi-arrow tap burst could
+  /// queue rebuilds/allocations faster than they could be processed and
+  /// freed — confirmed on-device as a real `Out of memory` crash in the
+  /// Dart VM's zone allocator, not just a slowdown. Gating the *next* tap
+  /// on the *previous* activateArrow() call truly finishing turns that
+  /// unbounded pile-up into a simple queue-of-one; normal-speed tapping
+  /// (one move takes well under 100ms end-to-end) isn't affected.
+  Future<void> _handleArrowTap(String arrowId, Board board, BoardShape shape,
+      Set<String> activatableSet, GameNotifier gameNotifier) async {
+    if (_isHandlingTap || _busyArrowIds.contains(arrowId)) return;
+
+    if (_pendingPowerUp == 'HAMMER') {
+      final arrow = board.arrows[arrowId];
+      setState(() => _pendingPowerUp = null);
+      if (arrow == null) return;
+      _isHandlingTap = true;
+      _busyArrowIds.add(arrowId);
+      final result = await gameNotifier.usePowerUp(HammerPowerUp(targetArrowId: arrowId));
+      _isHandlingTap = false;
+      if (!mounted) return;
+      _handlePowerUpResult(result);
+      if (result != null && result.success) {
+        _startSmashAnimation(arrow); // clears _busyArrowIds on completion
+      } else {
+        setState(() => _busyArrowIds.remove(arrowId));
+      }
+      return;
+    }
+
+    final willAnimateExit = activatableSet.contains(arrowId) &&
+        !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape);
+    _isHandlingTap = true;
+    _busyArrowIds.add(arrowId);
+    if (willAnimateExit) {
+      final arrow = board.arrows[arrowId];
+      if (arrow != null) _startExitAnimation(arrow, shape); // clears _busyArrowIds on completion
+    }
+    await gameNotifier.activateArrow(arrowId);
+    _isHandlingTap = false;
+    if (!mounted) return;
+    // A blocked/void-reentry tap never starts an exit animation, so
+    // nothing else will clear the busy flag for it.
+    if (!willAnimateExit) {
+      setState(() => _busyArrowIds.remove(arrowId));
+    }
   }
 
   void _handlePowerUpResult(PowerUpResult? result) {
@@ -621,29 +712,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                         smashingArrows: _buildSmashingAnimList(),
                         onArrowTapped: (arrowId) {
                           debugPrint('🎯 DiTreDi Arrow tapped: $arrowId');
-
-                          if (_pendingPowerUp == 'HAMMER') {
-                            final arrow = board.arrows[arrowId];
-                            setState(() => _pendingPowerUp = null);
-                            if (arrow == null) return;
-                            gameNotifier
-                                .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
-                                .then((result) {
-                              _handlePowerUpResult(result);
-                              if (result != null && result.success) {
-                                _startSmashAnimation(arrow);
-                              }
-                            });
-                            return;
-                          }
-
-                          if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
-                            final arrow = board.arrows[arrowId];
-                            if (arrow != null) {
-                              _startExitAnimation(arrow, shape);
-                            }
-                          }
-                          gameNotifier.activateArrow(arrowId);
+                          _handleArrowTap(arrowId, board, shape, activatableSet, gameNotifier);
                         },
                       ),
                     );
@@ -675,29 +744,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               debugPrint('🖱️ Tap at ${details.localPosition} → $arrowId');
                               if (arrowId == null) return;
                               debugPrint('🎯 Arrow tapped: $arrowId');
-
-                              if (_pendingPowerUp == 'HAMMER') {
-                                final arrow = board.arrows[arrowId];
-                                setState(() => _pendingPowerUp = null);
-                                if (arrow == null) return;
-                                gameNotifier
-                                    .usePowerUp(HammerPowerUp(targetArrowId: arrowId))
-                                    .then((result) {
-                                  _handlePowerUpResult(result);
-                                  if (result != null && result.success) {
-                                    _startSmashAnimation(arrow);
-                                  }
-                                });
-                                return;
-                              }
-
-                              if (activatableSet.contains(arrowId) && !board.graph.hasVoidReentry(arrowId, board.arrows, board.grid, board.shape)) {
-                                final arrow = board.arrows[arrowId];
-                                if (arrow != null) {
-                                  _startExitAnimation(arrow, shape);
-                                }
-                              }
-                              gameNotifier.activateArrow(arrowId);
+                              _handleArrowTap(arrowId, board, shape, activatableSet, gameNotifier);
                             },
                             child: CustomPaint(
                               painter: BoardPainter(

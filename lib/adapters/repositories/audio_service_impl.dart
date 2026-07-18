@@ -26,6 +26,11 @@ class AudioServiceImpl implements IAudioService {
   bool _isMuted = false;
   String? _currentMusicTrack;
 
+  // The effect sound currently loaded into _effectsPlayer — lets repeat
+  // plays of the same effect (e.g. "arrow_exit" on every successful move)
+  // skip straight to seek()+play() instead of reloading the asset.
+  String? _loadedEffectAsset;
+
   // Last track requested through playMusic(), kept even when the actual
   // play() call failed. On Web, the very first playMusic() call happens on
   // page load (no user gesture), so browser autoplay policies (Chrome,
@@ -48,24 +53,41 @@ class AudioServiceImpl implements IAudioService {
 
     try {
       debugPrint('🔊 AudioServiceImpl: Playing effect "$sound"');
-      final assetPath = _getAssetPath(sound);
 
-      // Stop any currently playing effect first
-      await _effectsPlayer.stop();
+      if (_loadedEffectAsset != sound) {
+        // Only reload from disk when the requested sound actually differs
+        // from what's already loaded. "arrow_exit" fires on every
+        // successful move — potentially hundreds of times a session — and
+        // calling setAsset() that often (the previous behavior: reload on
+        // every single play) triggers just_audio's native asset decoder
+        // to tear down and rebuild on every play. On iOS that repeatedly
+        // produced "-11849 Operation Stopped" (visible in the logs on
+        // nearly every move) and, confirmed on-device, a real native
+        // memory leak severe enough to crash the app with an Out of
+        // Memory error after "enough" moves — independent of how fast the
+        // player tapped, which is why it reproduced both from a fast-tap
+        // burst and from ~124 calm, deliberate moves.
+        await _effectsPlayer.stop();
+        await _effectsPlayer.setLoopMode(LoopMode.off);
+        await _effectsPlayer.setVolume(0.8);
+        await _effectsPlayer.setAsset(_getAssetPath(sound));
+        _loadedEffectAsset = sound;
+      } else {
+        // Same effect already loaded — just rewind and replay it instead
+        // of decoding the file again.
+        await _effectsPlayer.seek(Duration.zero);
+      }
 
-      // Set effect player to NOT loop
-      await _effectsPlayer.setLoopMode(LoopMode.off);
-
-      // Set lower volume for effects (e.g., 0.8) to not overwhelm music
-      await _effectsPlayer.setVolume(0.8);
-
-      // Load and play the effect asset
-      await _effectsPlayer.setAsset(assetPath);
       await _effectsPlayer.play();
 
       debugPrint('✅ AudioServiceImpl: Effect "$sound" started');
     } catch (e) {
       debugPrint('❌ AudioServiceImpl.playEffect: Error playing "$sound" - $e');
+      // The player may be left in an inconsistent state after a failed
+      // load — don't let a later call wrongly believe this asset is
+      // ready and skip straight to seek()+play() on a player that never
+      // actually finished loading it.
+      if (_loadedEffectAsset == sound) _loadedEffectAsset = null;
     }
   }
 
