@@ -22,6 +22,8 @@
 
 This repository is the **client only**. It needs the companion [`arrowMaze-backend`](https://github.com/ingvaleriariera/arrowMaze-backend) (NestJS + PostgreSQL) running for authentication, level distribution, leaderboards, and cross-device progress sync — the puzzle-solving logic itself (blocking graph, procedural arrow generation, win/lose rules) lives entirely on the client and never touches the network. See [Getting Started](#-getting-started) below for how to wire the two together.
 
+Besides the standard square/diamond/custom boards, Settings includes a standalone **hexagonal board mode** (6-connection, axial-coordinate cells) with two presets — a simple hexagon and a larger, more complex ring-shaped board — both fully playable with power-ups, move limits, and the same worm-style exit animation as the regular game.
+
 | Category | Technologies |
 | :--- | :--- |
 | **Framework** | **Flutter** (Dart `>=3.0.0 <4.0.0`) |
