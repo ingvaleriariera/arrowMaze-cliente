@@ -44,7 +44,11 @@ El requerimiento del profesor (celdas con 6 conexiones en lugar de 4) se abordó
 2. **Renderizado:** las dos primeras aproximaciones (visor por capas, proyección isométrica en cascada) fueron implementadas, probadas en dispositivo por el equipo y descartadas por no lograr el efecto tridimensional buscado. La versión final usa el motor `ditredi` (geometría 3D real: cuerpos con curvas Bézier, cabezas piramidales, cámara con rotación libre), desarrollada con Claude y Gemini Pro y pulida después con Claude Code.
 3. **Pulido:** correcciones de geometría (la punta de la flecha, huecos de renderizado en las curvas), efectos visuales de los comodines en 3D, y un botón para visualizar las líneas de salida del tablero.
 
-### 2.6 Depuración y verificación
+### 2.6 Modo de tablero hexagonal
+
+Como experimento aparte del juego principal, se pidió a Claude Code un tablero con celdas de 6 vecinos en coordenadas axiales (hexágonos) en lugar de la cuadrícula habitual. La IA reutilizó las entidades de dominio ya existentes (`GameSession`, las clases de comodines) en vez de duplicar lógica, lo cual redujo bastante la superficie de bugs nuevos. El resultado inicial se probó en dispositivo y se pidieron varias rondas de ajuste antes de aceptarlo como funcionalidad real: dos presets de tablero (uno simple y otro más grande y complejo con forma de anillo), un renderizado fiel al estilo del resto del juego, comodines y límite de movimientos, y la animación de salida de las flechas. Solo al validar que todo funcionaba bien en dispositivo se le pidió a la IA integrarlo como parte permanente de Configuración (antes vivía en una rama de prueba) y localizarlo a los dos idiomas del proyecto.
+
+### 2.7 Depuración y verificación
 
 La práctica constante fue: reportar el síntoma a la IA, pedir diagnóstico antes de tocar código, validar el fix en dispositivo físico. Los bugs resueltos así incluyen condiciones de carrera en el audio, estado de UI que no se refrescaba tras compras, animaciones duplicadas, y errores de arranque. La verificación con `flutter analyze` sin errores y la suite de tests fueron requisito antes de cada commit.
 
