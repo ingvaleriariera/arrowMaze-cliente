@@ -51,8 +51,42 @@ class Board3DEngineView extends StatefulWidget {
 class _Board3DEngineViewState extends State<Board3DEngineView> {
   late DiTreDiController _controller;
   final double cellSize = 2.0;
-  
+
   final Map<String, vector.Vector3> _arrowHeadPositions = {};
+
+  // Cache for the normal (non-animating) arrows' geometry. board_3d's per-
+  // frame cost used to be dominated by re-running _smoothPath's Bezier
+  // subdivision for every arrow on every rebuild — including rebuilds
+  // that only exist because a hint pulse/grid overlay/exit animation
+  // ticked, where nothing about the arrows themselves changed. Reusing
+  // this list on those ticks and only rebuilding it when the board or
+  // flash colors actually change turns an O(arrows x frame) cost back
+  // into O(arrows x real update) — the fix that made boards with many
+  // corners (e.g. level 3's concave cross shape) stop stalling once the
+  // curve-smoothing subdivision count went up to close rendering gaps.
+  List<Model3D>? _cachedStaticFigures;
+  Board? _cachedBoard;
+  Map<String, FlashType>? _cachedFlashMap;
+
+  // Holds the same figures as _cachedStaticFigures, but as a ValueNotifier
+  // consumed by its own ValueListenableBuilder further down — so the ~5000
+  // static Model3D list is only rebuilt into a fresh DiTreDi/CanvasModelPainter
+  // on an actual cache miss (a real board change), not on every one of the
+  // ~2000+ animation-frame rebuilds a single level can trigger (hint pulse,
+  // grid overlay fade, exit/smash animations). Before this split, every one
+  // of those frames re-copied and re-painted the entire static figure list
+  // regardless of whether anything in it changed, which is what was piling
+  // up enough per-frame garbage to OOM-crash large boards (level 3+) on both
+  // iOS and web after enough elapsed animation time.
+  final ValueNotifier<List<Model3D>> _staticFiguresNotifier = ValueNotifier(const []);
+  // Hammer/Magnet remove arrows straight from `board` without ever
+  // touching flashMap (GameNotifier.usePowerUp doesn't set any flash
+  // color), and `board` itself is mutated in place rather than replaced —
+  // so neither of the two checks above would notice those removals on
+  // their own. Arrow count catches every mutator Board actually exposes
+  // (removeArrow/forceRemoveArrow), since nothing in this codebase edits
+  // an arrow in place without removing it first.
+  int _cachedArrowCount = -1;
 
   @override
   void initState() {
@@ -65,6 +99,13 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
       maxUserScale: 100.0,
       light: vector.Vector3(0, 1, 1),
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _staticFiguresNotifier.dispose();
+    super.dispose();
   }
 
   // Smooths a path by replacing 90-degree corners with rounded curves
@@ -103,12 +144,16 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
       // flat quad (ditredi's Line3D has no mitered joints between
       // segments), so the angle between them leaves a small wedge-shaped
       // gap of background color at the joint — worse with fewer, wider
-      // angle steps. 10 subdivisions keeps the exact same curve shape
+      // angle steps. 6 subdivisions keeps the exact same curve shape
       // (same cornerRadius) but shrinks that per-joint angle enough for
-      // the gaps to disappear, without making the corner itself bigger,
-      // smaller, curvier or straighter.
-      for (int j = 1; j < 10; j++) {
-        final t = j / 10.0;
+      // the gaps to be imperceptible, without making the corner itself
+      // bigger, smaller, curvier or straighter. (Was 10 — cut back after
+      // that turned out to be expensive enough, recomputed every single
+      // animation frame with no caching, to visibly stall concave/many-
+      // cornered boards like level 3's cross shape. See _buildScene's
+      // static-figure cache for the other half of that fix.)
+      for (int j = 1; j < 6; j++) {
+        final t = j / 6.0;
         final invT = 1.0 - t;
         final curvePoint = (p1 * (invT * invT)) + (curr * (2 * invT * t)) + (p2 * (t * t));
         smoothed.add(curvePoint);
@@ -319,12 +364,13 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
     }
   }
 
-  List<Model3D> _buildScene() {
+  /// The expensive part: builds every normal arrow's smoothed body/head
+  /// geometry from scratch. Only called when the board or flash colors
+  /// actually changed — see [_buildScene]'s cache check.
+  List<Model3D> _buildStaticFigures() {
     final models = <Model3D>[];
     _arrowHeadPositions.clear();
-    List<vector.Vector3>? highlightBodyPoints;
 
-    // Normal arrows
     for (final entry in widget.board.arrows.entries) {
       final arrowId = entry.key;
       final arrow = entry.value;
@@ -345,21 +391,70 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
       }
 
       _drawArrowModel(models, rawPoints, arrowColor, dir, hitTestId: arrowId);
-      if (arrowId == widget.highlightArrowId) {
-        highlightBodyPoints = rawPoints;
-      }
     }
+
+    return models;
+  }
+
+  /// Cheap re-derivation of the hinted arrow's raw (pre-smoothing) points
+  /// from the board directly — used on cache hits, where [_buildStaticFigures]
+  /// didn't run this frame so it never captured them.
+  List<vector.Vector3>? _highlightBodyPoints() {
+    final id = widget.highlightArrowId;
+    if (id == null) return null;
+    final arrow = widget.board.arrows[id];
+    if (arrow == null) return null;
+    return arrow.segments
+        .map((s) => _posToVec(s.position.x.toDouble(), s.position.y.toDouble(), s.position.z.toDouble()))
+        .toList();
+  }
+
+  /// Rebuilds the static figure list and pushes it into [_staticFiguresNotifier]
+  /// only when the board/flash/arrow-count cache key actually changed —
+  /// otherwise leaves the notifier (and the ValueListenableBuilder consuming
+  /// it in [build]) completely untouched, so no repaint of the ~5000-model
+  /// static layer happens on frames where nothing about the board changed.
+  /// Returns the hinted arrow's raw body points either way, since the hint
+  /// gizmo itself is part of the dynamic layer and needs them every frame.
+  List<vector.Vector3>? _refreshStaticFiguresIfNeeded() {
+    final cacheHit = _cachedStaticFigures != null &&
+        identical(widget.board, _cachedBoard) &&
+        identical(widget.flashMap, _cachedFlashMap) &&
+        widget.board.arrows.length == _cachedArrowCount;
+
+    if (cacheHit) {
+      return _highlightBodyPoints();
+    }
+
+    final staticFigures = _buildStaticFigures();
+    _cachedStaticFigures = staticFigures;
+    _cachedBoard = widget.board;
+    _cachedFlashMap = widget.flashMap;
+    _cachedArrowCount = widget.board.arrows.length;
+    _staticFiguresNotifier.value = staticFigures;
+    return widget.highlightArrowId != null ? _highlightBodyPoints() : null;
+  }
+
+  /// Builds only the DYNAMIC layer (exiting/smashing arrows, hint gizmo,
+  /// grid overlay lines) — the handful of models that actually change
+  /// every animation frame. The static ~5000-model board layer is handled
+  /// separately by [_refreshStaticFiguresIfNeeded] + [_staticFiguresNotifier]
+  /// so it isn't rebuilt on frames where nothing about the board changed.
+  List<Model3D> _buildScene() {
+    final highlightBodyPoints = _refreshStaticFiguresIfNeeded();
+
+    final models = <Model3D>[];
 
     // Exiting arrows (Animation)
     for (final exiting in widget.exitingArrows) {
       final colorValue = int.parse(exiting.color.replaceFirst('#', ''), radix: 16) | 0xFF000000;
       final arrowColor = Color(colorValue);
       final dir = exiting.direction;
-      
+
       final n = exiting.cells.length;
       final totalDistance = exiting.edgeDistance + n;
       final headTravel = exiting.progress * totalDistance;
-      
+
       // The snake moves forward. The tail is at s = headTravel, the head is at s = n - 1 + headTravel
       List<vector.Vector3> rawPoints = [];
       // Generate points along the snake body
@@ -367,7 +462,7 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
         final s = i + headTravel;
         rawPoints.add(_getInterpPos(exiting.cells, dir, s));
       }
-      
+
       _drawArrowModel(models, rawPoints, arrowColor, dir);
     }
 
@@ -380,7 +475,27 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
 
   void _handleTap(Offset localPosition, Size canvasSize) {
     final scale = _controller.scale;
-    final matrix = vector.Matrix4.identity()
+
+    // Mirrors CanvasModelPainter.paint's matrix exactly (see
+    // third_party/ditredi/lib/src/painter/canvas_model_painter.dart) —
+    // including the perspective row, which the previous version of this
+    // method omitted. DiTreDiConfig.perspective defaults to true, and
+    // ditredi's own per-vertex painters project with
+    // Matrix4.perspectiveTransform (divides x/y by the transformed w),
+    // not the plain affine Matrix4.transform3 this method used before.
+    // Skipping that division meant the hit-test position silently drifted
+    // away from the arrow's actual on-screen position as it moved off
+    // dead-center or the camera rotated — the tap target and the visible
+    // arrowhead were never quite the same point, which is what made
+    // clicks feel like they needed to land "a bit above" or "to the side",
+    // and made tapping more reliable dead-on the head where the drift is
+    // smallest. Our board's `bounds` is always centered at the origin
+    // (see build()'s `Aabb3.centerAndHalfExtents(Vector3.zero(), ...)`),
+    // so the bounds-center translate terms in the original cancel out and
+    // are omitted here rather than duplicated.
+    final matrix = vector.Matrix4.identity();
+    matrix.setEntry(3, 2, -0.001);
+    matrix
       ..translate(_controller.translation.dx, _controller.translation.dy, 0.0)
       ..scale(scale, -scale, -scale)
       ..rotateX(vector.radians(_controller.rotationX))
@@ -393,11 +508,11 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
 
     for (final entry in _arrowHeadPositions.entries) {
       final pos3D = entry.value.clone();
-      matrix.transform3(pos3D);
-      
+      matrix.perspectiveTransform(pos3D);
+
       final screenX = canvasSize.width / 2 + pos3D.x;
       final screenY = canvasSize.height / 2 + pos3D.y;
-      
+
       final dx = screenX - localPosition.dx;
       final dy = screenY - localPosition.dy;
       final distSq = dx * dx + dy * dy;
@@ -455,12 +570,36 @@ class _Board3DEngineViewState extends State<Board3DEngineView> {
             onTapUp: (details) => _handleTap(details.localPosition, size),
             onScaleStart: _handleScaleStart,
             onScaleUpdate: _handleScaleUpdate,
-            child: DiTreDi(
-              figures: _buildScene(),
-              controller: _controller,
-              bounds: vector.Aabb3.centerAndHalfExtents(
-                 vector.Vector3.zero(), vector.Vector3.all(100)
-              ),
+            child: Stack(
+              children: [
+                // Static layer: the board's ~thousands of non-animating
+                // arrow models. ValueListenableBuilder only rebuilds this
+                // DiTreDi (and its CanvasModelPainter) when
+                // _staticFiguresNotifier's value actually changes — i.e. on
+                // a real cache miss — instead of on every animation frame.
+                ValueListenableBuilder<List<Model3D>>(
+                  valueListenable: _staticFiguresNotifier,
+                  builder: (context, staticFigures, _) {
+                    return DiTreDi(
+                      figures: staticFigures,
+                      controller: _controller,
+                      bounds: vector.Aabb3.centerAndHalfExtents(
+                        vector.Vector3.zero(), vector.Vector3.all(100),
+                      ),
+                    );
+                  },
+                ),
+                // Dynamic layer: exiting/smashing arrows, hint gizmo, grid
+                // overlay lines — a handful of models, rebuilt every frame
+                // like before.
+                DiTreDi(
+                  figures: _buildScene(),
+                  controller: _controller,
+                  bounds: vector.Aabb3.centerAndHalfExtents(
+                     vector.Vector3.zero(), vector.Vector3.all(100)
+                  ),
+                ),
+              ],
             ),
           ),
         );
