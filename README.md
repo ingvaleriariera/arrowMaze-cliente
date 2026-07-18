@@ -22,8 +22,6 @@
 
 This repository is the **client only**. It needs the companion [`arrowMaze-backend`](https://github.com/ingvaleriariera/arrowMaze-backend) (NestJS + PostgreSQL) running for authentication, level distribution, leaderboards, and cross-device progress sync — the puzzle-solving logic itself (blocking graph, procedural arrow generation, win/lose rules) lives entirely on the client and never touches the network. See [Getting Started](#-getting-started) below for how to wire the two together.
 
-Besides the standard square/diamond/custom boards, Settings includes a standalone **hexagonal board mode** (6-connection, axial-coordinate cells) with two presets — a simple hexagon and a larger, more complex ring-shaped board — both fully playable with power-ups, move limits, and the same worm-style exit animation as the regular game.
-
 | Category | Technologies |
 | :--- | :--- |
 | **Framework** | **Flutter** (Dart `>=3.0.0 <4.0.0`) |
@@ -53,6 +51,16 @@ Besides the standard square/diamond/custom boards, Settings includes a standalon
 <p align="center">
   <sub>Login · Home · Level select · In-game board</sub>
 </p>
+
+---
+
+## 🧊 3D Mode
+
+Settings has two separate toggles — **"3D board"** and **"3D game (6 directions)"** — and both need to be turned on together to get the full 3D experience. "3D game" changes the puzzle logic itself: boards become 4-layer prisms, and arrows can move between floors, not just across a flat grid. "3D board" changes how that board is rendered: instead of the flat 2D canvas, it's drawn as a real 3D scene (via `ditredi`) that you can drag to rotate and pinch to zoom. Turning on only one of the two still works, but it's a half-experience: "3D game" alone still renders flat 2D, and "3D board" alone renders in 3D a board that's still just a flat 4-direction grid.
+
+## 🔷 Hexagonal Board Mode
+
+Also reachable from Settings, independent of the modes above: a standalone hexagonal board (6-connection, axial-coordinate cells instead of the usual square grid) with two presets to choose from — a simple hexagon and a larger, more complex ring-shaped board. It's fully playable on its own, with power-ups, a move limit, and the same arrow-exit animation as the regular game.
 
 ---
 
