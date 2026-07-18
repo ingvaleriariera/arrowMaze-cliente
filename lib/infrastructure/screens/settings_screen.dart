@@ -47,6 +47,13 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (_) => settingsNotifier.toggleGame3D(),
           ),
           ListTile(
+            leading: const Icon(Icons.hexagon_outlined, color: Color(0xFFFFB800)),
+            title: Text(l10n.translate('hexBoard')),
+            subtitle: Text(l10n.translate('hexBoardDescription')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/hex-board'),
+          ),
+          ListTile(
             title: Text(l10n.translate('language')),
             subtitle: Text(l10n.translate('languageSubtitle')),
             onTap: () {

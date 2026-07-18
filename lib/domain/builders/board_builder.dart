@@ -16,12 +16,18 @@ class BoardBuilder {
   final Map<String, Arrow> _arrows = {};
   int? _calculatedMaxMoves;
 
-  BoardBuilder({int? seed}) {
+  /// When true, arrows grow/scan across the 6 hex neighbors
+  /// (Direction.hexAll) instead of the normal 4-planar/6-extruded choice.
+  /// Meant to pair with a [BoardShape.hexagon] or [BoardShape.hexagonRing].
+  final bool useHexDirections;
+
+  BoardBuilder({int? seed, this.useHexDirections = false}) {
     _random = Random(seed);
     _difficultyStr = 'EASY';
   }
 
-  static BoardBuilder create({int? seed}) => BoardBuilder(seed: seed);
+  static BoardBuilder create({int? seed, bool useHexDirections = false}) =>
+      BoardBuilder(seed: seed, useHexDirections: useHexDirections);
 
   /// Builds a fresh, unplayed [Board] from an already-known arrow layout
   /// (e.g. one pulled from [IBoardCache]) instead of searching for a new
@@ -551,7 +557,7 @@ class BoardBuilder {
     final dx = to.x - from.x;
     final dy = to.y - from.y;
     final dz = to.z - from.z;
-    for (final dir in Direction.all) {
+    for (final dir in _availableDirections()) {
       if (dir.dx == dx && dir.dy == dy && dir.dz == dz) return dir;
     }
     return null;
@@ -604,13 +610,15 @@ class BoardBuilder {
     return _cachedBounds = (maxX: maxX, maxY: maxY, maxZ: maxZ);
   }
 
-  /// The direction set this shape's cells connect through: 4 planar
-  /// neighbors on flat boards, 6 (adding forward/back along Z) on
-  /// extruded ones. Gated on actual depth so flat boards never generate
-  /// arrows pointing into Z — those would exit instantly and trivialize
-  /// the puzzle.
-  List<Direction> _availableDirections() =>
-      _shapeBounds().maxZ > 0 ? Direction.all : Direction.planar;
+  /// The direction set this shape's cells connect through: the 6 hex
+  /// neighbors on hex boards, 4 planar neighbors on flat
+  /// square boards, or 6 (adding forward/back along Z) on extruded ones.
+  /// Gated on actual depth so flat boards never generate arrows pointing
+  /// into Z — those would exit instantly and trivialize the puzzle.
+  List<Direction> _availableDirections() {
+    if (useHexDirections) return Direction.hexAll;
+    return _shapeBounds().maxZ > 0 ? Direction.all : Direction.planar;
+  }
 
   List<ArrowSegment> _createArrowSegments(
       List<Position> path, Direction direction) {

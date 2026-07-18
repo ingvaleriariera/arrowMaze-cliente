@@ -22,6 +22,22 @@ class Direction {
   /// All six cell connections — what extruded (3D) boards use.
   static const List<Direction> all = [up, down, left, right, forward, back];
 
+  // --- Hex board experiment (axial q,r coordinates, dz always 0) ---
+  // x acts as the axial q, y as the axial r. Two of these (hexNW/hexSE)
+  // happen to share raw deltas with up/down — harmless as data, just
+  // never mix hexAll with planar/all in the same lookup/loop.
+  static const Direction hexE = Direction._(1, 0);
+  static const Direction hexNE = Direction._(1, -1);
+  static const Direction hexNW = Direction._(0, -1);
+  static const Direction hexW = Direction._(-1, 0);
+  static const Direction hexSW = Direction._(-1, 1);
+  static const Direction hexSE = Direction._(0, 1);
+
+  /// The six neighbors of a hexagonal (axial-coordinate) board.
+  static const List<Direction> hexAll = [
+    hexE, hexNE, hexNW, hexW, hexSW, hexSE,
+  ];
+
   Direction opposite() {
     if (this == up) return down;
     if (this == down) return up;
@@ -29,6 +45,12 @@ class Direction {
     if (this == right) return left;
     if (this == forward) return back;
     if (this == back) return forward;
+    if (this == hexE) return hexW;
+    if (this == hexW) return hexE;
+    if (this == hexNE) return hexSW;
+    if (this == hexSW) return hexNE;
+    if (this == hexNW) return hexSE;
+    if (this == hexSE) return hexNW;
     return this;
   }
 

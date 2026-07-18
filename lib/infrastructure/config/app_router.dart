@@ -13,6 +13,7 @@ import 'package:arrow_maze_cliente_copy/infrastructure/screens/leaderboard_scree
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/settings_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/boards_screen.dart';
 import 'package:arrow_maze_cliente_copy/infrastructure/screens/board_editor_screen.dart';
+import 'package:arrow_maze_cliente_copy/infrastructure/screens/hex_board_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -49,6 +50,10 @@ class AppRouter {
       GoRoute(
         path: '/boards/editor',
         builder: (context, state) => const BoardEditorScreen(),
+      ),
+      GoRoute(
+        path: '/hex-board',
+        builder: (context, state) => const HexBoardScreen(),
       ),
       GoRoute(
         path: '/game/:levelId',

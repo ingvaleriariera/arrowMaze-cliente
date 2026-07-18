@@ -61,6 +61,42 @@ class BoardShape {
     return BoardShape(validCells: cells);
   }
 
+  /// A hexagonal region of [radius] rings around axial center (centerQ,
+  /// centerR) — shared by [hexagon] and [hexagonRing] below.
+  static Set<String> _hexRegion(int centerQ, int centerR, int radius) {
+    final cells = <String>{};
+    for (int dq = -radius; dq <= radius; dq++) {
+      final rMin = dq < 0 ? -radius - dq : -radius;
+      final rMax = dq < 0 ? radius : radius - dq;
+      for (int dr = rMin; dr <= rMax; dr++) {
+        cells.add(Position(centerQ + dq, centerR + dr).toKey());
+      }
+    }
+    return cells;
+  }
+
+  /// A hexagon made of hexagons, [radius] rings out from the center,
+  /// addressed by axial coordinates (x=q, y=r). Offset so every
+  /// coordinate stays >= 0 — BoardBuilder/BoardGraph's ray-scan treats a
+  /// negative x/y as "already off the board", same assumption the 2D
+  /// square boards rely on. Only meaningful paired with
+  /// `BoardBuilder(useHexDirections: true)`; used with the normal 4/6
+  /// planar directions it's just a same-shaped square-ish region.
+  static BoardShape hexagon(int radius) =>
+      BoardShape(validCells: _hexRegion(radius, radius, radius));
+
+  /// A hexagonal "donut" — a big hexagon with a smaller
+  /// hexagonal hole punched out of its center. A bigger, structurally
+  /// different board than [hexagon]: it forces arrows to route around
+  /// the hole (and exercises the same "void re-entry" rule the square
+  /// ring-shaped levels already rely on), instead of just being a
+  /// larger version of the same solid shape.
+  static BoardShape hexagonRing(int outerRadius, int innerRadius) {
+    final outer = _hexRegion(outerRadius, outerRadius, outerRadius);
+    final inner = _hexRegion(outerRadius, outerRadius, innerRadius);
+    return BoardShape(validCells: outer.difference(inner));
+  }
+
   bool contains(Position position) =>
       validCells.contains(position.toKey());
 
